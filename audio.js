@@ -13,6 +13,17 @@ const DEFAULT_MASTER = {
   analyzeOnly: false,   // defaults are already neutral; presets that omit this must not silently bypass processing
 };
 
+// Recursively merge plain objects into a fresh copy; `override` wins, undefined/null fields keep the base value.
+const isObj = v => v !== null && typeof v === 'object' && !Array.isArray(v);
+function deepMerge(base, override) {
+  const out = {};
+  for (const k of new Set([...Object.keys(base ?? {}), ...Object.keys(override ?? {})])) {
+    const b = base?.[k], o = override?.[k];
+    out[k] = isObj(b) || isObj(o) ? deepMerge(isObj(b) ? b : {}, isObj(o) ? o : {}) : (o ?? b);
+  }
+  return out;
+}
+
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const toDb = x => (x > 1e-10 ? 10 * Math.log10(x) : -Infinity);
 
@@ -98,21 +109,7 @@ export class AudioEngine {
   // Missing fields (including inside comp/limiter) fall back to DEFAULT_MASTER.
   // Fader (EQ) values are set separately through setGain().
   applyMaster(preset) {
-    const base = {
-      ...DEFAULT_MASTER,
-      comp: { ...DEFAULT_MASTER.comp },
-      limiter: { ...DEFAULT_MASTER.limiter },
-    };
-
-    this.master_ = preset
-      ? {
-          ...base,
-          ...preset,
-          comp: { ...base.comp, ...(preset.comp ?? {}) },
-          limiter: { ...base.limiter, ...(preset.limiter ?? {}) },
-        }
-      : base;
-
+    this.master_ = deepMerge(DEFAULT_MASTER, preset);
     if (this.ctx) this._applyMaster(false);
   }
 

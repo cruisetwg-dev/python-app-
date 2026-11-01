@@ -10,7 +10,7 @@ const DEFAULT_MASTER = {
   limiter: { threshold: 0, knee: 0, ratio: 1, attack: 0.001, release: 0.05 },
   saturation: 0,
   spread: 1,
-  analyzeOnly: true,
+  analyzeOnly: false,   // defaults are already neutral; presets that omit this must not silently bypass processing
 };
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
@@ -95,9 +95,24 @@ export class AudioEngine {
   }
 
   // Apply a mastering preset (from eq.js) to everything after the EQ. Pass null for transparent defaults.
+  // Missing fields (including inside comp/limiter) fall back to DEFAULT_MASTER.
   // Fader (EQ) values are set separately through setGain().
   applyMaster(preset) {
-    this.master_ = preset ? { ...preset } : DEFAULT_MASTER;
+    const base = {
+      ...DEFAULT_MASTER,
+      comp: { ...DEFAULT_MASTER.comp },
+      limiter: { ...DEFAULT_MASTER.limiter },
+    };
+
+    this.master_ = preset
+      ? {
+          ...base,
+          ...preset,
+          comp: { ...base.comp, ...(preset.comp ?? {}) },
+          limiter: { ...base.limiter, ...(preset.limiter ?? {}) },
+        }
+      : base;
+
     if (this.ctx) this._applyMaster(false);
   }
 

@@ -19,7 +19,7 @@ export class AudioEngine {
       return f;
     });
     this.input = ctx.createGain();
-    this.master = ctx.createGain(); this.master.gain.value = 0.8;
+    this.master = ctx.createGain(); this.master.gain.value = this.pendingMaster ?? 0.8;
     this.analyser = ctx.createAnalyser(); this.analyser.fftSize = 2048; this.analyser.smoothingTimeConstant = 0.8;
     [this.input, ...this.filters, this.master, this.analyser].reduce((a, b) => (a.connect(b), b));
     this.analyser.connect(ctx.destination);
@@ -32,6 +32,11 @@ export class AudioEngine {
     if (!this.filters) return;
     // short ramp avoids zipper noise while still tracking the finger in real time
     this.filters[i].gain.setTargetAtTime(db, this.ctx.currentTime, 0.015);
+  }
+
+  setMaster(v) {
+    this.pendingMaster = v;
+    if (this.master) this.master.gain.setTargetAtTime(v, this.ctx.currentTime, 0.015);
   }
 
   spectrum(out) {

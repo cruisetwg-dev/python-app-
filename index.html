@@ -37,6 +37,9 @@
   </select>
   <label class="btn" for="file">Load file</label>
   <input id="file" type="file" accept="audio/*">
+  <select id="preset" aria-label="Target preset">
+    <option value="">Preset…</option>
+  </select>
   <button id="reset">Reset EQ</button>
 </div>
 <div id="readout"></div>
@@ -47,6 +50,7 @@
 import * as THREE from 'three';
 import { EQ } from './eq.js';
 import { AudioEngine } from './audio.js';
+import { TARGET_PRESETS } from './presets.js';
 
 const BANDS = EQ.bands;                       // [{name, type, freq, q, color}]
 const RANGE = EQ.rangeDb;                     // ±dB
@@ -244,7 +248,21 @@ playBtn.onclick = async () => {
 };
 sourceSel.onchange = () => { if (audio.playing) startSource(); };
 fileIn.onchange = () => { if (fileIn.files[0]) { sourceSel.value = 'file'; startSource(); } };
-document.getElementById('reset').onclick = () => faders.forEach((_, i) => setFader(i, 0));
+document.getElementById('reset').onclick = () => { faders.forEach((_, i) => setFader(i, 0)); presetSel.value = ''; };
+
+// presets: low/mid/high are dB offsets applied to the faders, master is linear output gain.
+// lufs/truePeak are delivery targets, shown for reference (no loudness metering/limiting here).
+const presetSel = document.getElementById('preset');
+for (const [id, p] of Object.entries(TARGET_PRESETS)) {
+  const o = document.createElement('option'); o.value = id;
+  o.textContent = p.lufs == null ? `${id} · ${p.label}` : `${id} · ${p.label} (${p.lufs} LUFS, ${p.truePeak} dBTP)`;
+  presetSel.appendChild(o);
+}
+presetSel.onchange = () => {
+  const p = TARGET_PRESETS[presetSel.value]; if (!p || p.passiveOnly) return;   // Test: leave everything as is
+  setFader(0, p.low); setFader(1, p.mid); setFader(2, p.high);
+  audio.setMaster(p.master);
+};
 
 // ---------- loop ----------
 function resize() {

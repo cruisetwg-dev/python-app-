@@ -22,3 +22,11 @@ python3 -m http.server 8000   # then open http://localhost:8000
 - Drag the background to orbit, pinch/scroll to zoom, double-tap a fader to reset it.
 
 Files: `index.html` (3D UI), `audio.js` (audio graph/sources), `eq.js` (band definitions).
+
+## Mastering presets
+The **Preset** dropdown (A Apple/iTunes, B Spotify, C Custom, T Test) is defined in `eq.js`. Picking one moves the
+three faders to the preset's EQ values and configures saturation, stereo spread, compressor, limiter and master gain.
+`T` is meter-only (EQ flat, no processing). **Reset EQ** returns the faders and the mastering chain to neutral.
+
+The meter (bottom right) shows approximate momentary loudness (K-weighted, 400 ms) and sample peak. Presets do not
+auto-normalise to their LUFS target; the target is shown so you can ride the faders/source level toward it.

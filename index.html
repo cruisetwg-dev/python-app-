@@ -21,6 +21,8 @@
   input[type=file] { display:none; }
   #hint { position:fixed; left:0; right:0; bottom:10px; text-align:center; font-size:12px; color:var(--muted);
     pointer-events:none; padding:0 16px; }
+  #meter { position:fixed; right:16px; bottom:34px; font:12px ui-monospace,Menlo,monospace; color:var(--muted);
+    text-align:right; line-height:1.6; pointer-events:none; }
   #readout { position:fixed; right:16px; top:56px; font:12px ui-monospace,Menlo,monospace; color:var(--muted);
     text-align:right; line-height:1.6; pointer-events:none; }
 </style>
@@ -43,14 +45,14 @@
   <button id="reset">Reset EQ</button>
 </div>
 <div id="readout"></div>
+<div id="meter"></div>
 <div id="hint">Drag a fader up/down to change that band live · drag the background to orbit · pinch/scroll to zoom · double-tap a fader to reset it</div>
 
 <script type="importmap">{"imports":{"three":"./vendor/three.module.js"}}</script>
 <script type="module">
 import * as THREE from 'three';
-import { EQ } from './eq.js';
+import { EQ, MASTER_PRESETS, getPresetById } from './eq.js';
 import { AudioEngine } from './audio.js';
-import { TARGET_PRESETS } from './presets.js';
 
 const BANDS = EQ.bands;                       // [{name, type, freq, q, color}]
 const RANGE = EQ.rangeDb;                     // ±dB
@@ -248,21 +250,38 @@ playBtn.onclick = async () => {
 };
 sourceSel.onchange = () => { if (audio.playing) startSource(); };
 fileIn.onchange = () => { if (fileIn.files[0]) { sourceSel.value = 'file'; startSource(); } };
-document.getElementById('reset').onclick = () => { faders.forEach((_, i) => setFader(i, 0)); presetSel.value = ''; };
-
-// presets: low/mid/high are dB offsets applied to the faders, master is linear output gain.
-// lufs/truePeak are delivery targets, shown for reference (no loudness metering/limiting here).
+// presets (eq.js): EQ values move the 3D faders; the rest of the mastering chain is applied by the engine.
+let currentPreset = null;
 const presetSel = document.getElementById('preset');
-for (const [id, p] of Object.entries(TARGET_PRESETS)) {
-  const o = document.createElement('option'); o.value = id;
-  o.textContent = p.lufs == null ? `${id} · ${p.label}` : `${id} · ${p.label} (${p.lufs} LUFS, ${p.truePeak} dBTP)`;
+for (const p of Object.values(MASTER_PRESETS)) {
+  const o = document.createElement('option'); o.value = p.id; o.title = p.description;
+  o.textContent = p.lufsTarget == null ? `${p.id} · ${p.label}` : `${p.id} · ${p.label} (${p.lufsTarget} LUFS, ${p.truePeakLimit} dBTP)`;
   presetSel.appendChild(o);
 }
 presetSel.onchange = () => {
-  const p = TARGET_PRESETS[presetSel.value]; if (!p || p.passiveOnly) return;   // Test: leave everything as is
-  setFader(0, p.low); setFader(1, p.mid); setFader(2, p.high);
-  audio.setMaster(p.master);
+  if (!presetSel.value) return;
+  currentPreset = getPresetById(presetSel.value);
+  setFader(0, currentPreset.eq.low); setFader(1, currentPreset.eq.mid); setFader(2, currentPreset.eq.high);
+  audio.applyMaster(currentPreset);
 };
+document.getElementById('reset').onclick = () => {
+  faders.forEach((_, i) => setFader(i, 0));
+  currentPreset = null; presetSel.value = ''; audio.applyMaster(null);
+};
+
+// meter readout: approximate momentary loudness + sample peak vs. the preset's targets
+const meterEl = document.getElementById('meter');
+let lastMeter = 0;
+function updateMeter(now) {
+  if (now - lastMeter < 100) return; lastMeter = now;
+  const m = audio.meter();
+  if (!m) { meterEl.textContent = ''; return; }
+  const fmt = v => (isFinite(v) ? v.toFixed(1) : '—');
+  const lt = currentPreset?.lufsTarget, pl = currentPreset?.truePeakLimit;
+  const hot = (pl != null && m.peak > pl) ? '#ff6b6b' : 'inherit';
+  meterEl.innerHTML = `Loudness (momentary) <b>${fmt(m.lufs)} LUFS</b>${lt != null ? ` · target ${lt}` : ''}<br>` +
+    `Peak <b style="color:${hot}">${fmt(m.peak)} dBFS</b>${pl != null ? ` · limit ${pl}` : ''}`;
+}
 
 // ---------- loop ----------
 function resize() {
@@ -275,8 +294,9 @@ addEventListener('resize', resize); resize();
 orbit.dist = innerWidth < innerHeight ? 12 : 9;
 
 const spec = new Uint8Array(1024);
-function frame() {
+function frame(now) {
   requestAnimationFrame(frame);
+  updateMeter(now);
   const cp = Math.cos(orbit.phi), sp = Math.sin(orbit.phi);
   camera.position.set(orbit.target.x + orbit.dist * Math.sin(orbit.theta) * cp,
                       orbit.target.y + orbit.dist * sp,
@@ -292,7 +312,7 @@ function frame() {
   }
   renderer.render(scene, camera);
 }
-frame();
+requestAnimationFrame(frame);
 </script>
 </body>
 </html>

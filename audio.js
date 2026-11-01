@@ -1,28 +1,88 @@
-// Web Audio engine: source -> low shelf -> mid peak -> high shelf -> master -> analyser -> speakers.
+// Web Audio engine:
+//   source -> 3-band EQ -> saturation (parallel) -> stereo spread (M/S) -> compressor -> makeup
+//          -> limiter -> master -> analyser -> speakers
 // Each fader writes straight to its BiquadFilterNode gain AudioParam, so changes are heard immediately.
+// Mastering presets (see eq.js) drive everything after the EQ via applyMaster().
+
+const DEFAULT_MASTER = {
+  masterGain: 0.8,
+  comp: { threshold: -24, knee: 0, ratio: 1, attack: 0.003, release: 0.25, makeup: 1.0 },
+  limiter: { threshold: 0, knee: 0, ratio: 1, attack: 0.001, release: 0.05 },
+  saturation: 0,
+  spread: 1,
+  analyzeOnly: true,
+};
+
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+const toDb = x => (x > 1e-10 ? 10 * Math.log10(x) : -Infinity);
+
 export class AudioEngine {
   constructor(bands) {
     this.bands = bands;
     this.ctx = null;
     this.playing = false;
-    this.source = null;
     this.stopSource = null;
     this.pending = bands.map(() => 0);        // gains set before the context exists
+    this.master_ = DEFAULT_MASTER;            // mastering settings set before the context exists
   }
 
   _init() {
     if (this.ctx) return;
     const ctx = this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const stereo = n => { n.channelCount = 2; n.channelCountMode = 'explicit'; n.channelInterpretation = 'speakers'; return n; };
+
     this.filters = this.bands.map((b, i) => {
       const f = ctx.createBiquadFilter();
       f.type = b.type; f.frequency.value = b.freq; f.Q.value = b.q; f.gain.value = this.pending[i];
       return f;
     });
-    this.input = ctx.createGain();
-    this.master = ctx.createGain(); this.master.gain.value = this.pendingMaster ?? 0.8;
+    this.input = stereo(ctx.createGain());    // mono sources are upmixed to both channels
+
+    // saturation: dry + tanh-shaped wet in parallel
+    const curve = new Float32Array(2048);
+    for (let i = 0; i < curve.length; i++) { const x = (i / (curve.length - 1)) * 2 - 1; curve[i] = Math.tanh(2.5 * x) / Math.tanh(2.5); }
+    this.shaper = ctx.createWaveShaper(); this.shaper.curve = curve; this.shaper.oversample = '2x';
+    this.dry = ctx.createGain(); this.wet = ctx.createGain();
+    const satSum = stereo(ctx.createGain());
+
+    // stereo spread: mid/side matrix, side scaled by `spread`
+    const split = ctx.createChannelSplitter(2), merge = ctx.createChannelMerger(2);
+    const g = v => { const n = ctx.createGain(); n.gain.value = v; return n; };
+    const mL = g(0.5), mR = g(0.5), sL = g(0.5), sR = g(-0.5);
+    const midSum = g(1); this.sideSum = g(1); const sideInv = g(-1);
+
+    this.comp = ctx.createDynamicsCompressor();
+    this.makeup = ctx.createGain();
+    this.limiter = ctx.createDynamicsCompressor();
+    this.master = ctx.createGain();
     this.analyser = ctx.createAnalyser(); this.analyser.fftSize = 2048; this.analyser.smoothingTimeConstant = 0.8;
-    [this.input, ...this.filters, this.master, this.analyser].reduce((a, b) => (a.connect(b), b));
+
+    const chain = [this.input, ...this.filters];
+    chain.reduce((a, b) => (a.connect(b), b));
+    const eqOut = chain[chain.length - 1];
+    eqOut.connect(this.dry); this.dry.connect(satSum);
+    eqOut.connect(this.shaper); this.shaper.connect(this.wet); this.wet.connect(satSum);
+    satSum.connect(split);
+    split.connect(mL, 0); split.connect(mR, 1); split.connect(sL, 0); split.connect(sR, 1);
+    mL.connect(midSum); mR.connect(midSum); sL.connect(this.sideSum); sR.connect(this.sideSum);
+    midSum.connect(merge, 0, 0); this.sideSum.connect(merge, 0, 0);          // L = M + S
+    midSum.connect(merge, 0, 1); this.sideSum.connect(sideInv); sideInv.connect(merge, 0, 1);  // R = M - S
+    [merge, this.comp, this.makeup, this.limiter, this.master, this.analyser].reduce((a, b) => (a.connect(b), b));
     this.analyser.connect(ctx.destination);
+
+    // meters tap the master output: sample peak per channel, and K-weighted power per channel (BS.1770-style)
+    const mSplit = ctx.createChannelSplitter(2);
+    this.master.connect(mSplit);
+    const tap = (from, out, fft) => { const a = ctx.createAnalyser(); a.fftSize = fft; from.connect(a, out); return a; };
+    this.peakAn = [tap(mSplit, 0, 2048), tap(mSplit, 1, 2048)];
+    const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 38; hp.Q.value = 0.5;
+    const hs = ctx.createBiquadFilter(); hs.type = 'highshelf'; hs.frequency.value = 1681; hs.gain.value = 4;
+    stereo(hp); this.master.connect(hp); hp.connect(hs);
+    const kSplit = ctx.createChannelSplitter(2); hs.connect(kSplit);
+    this.kAn = [tap(kSplit, 0, 32768), tap(kSplit, 1, 32768)];
+    this._peakBuf = new Float32Array(2048); this._kBuf = new Float32Array(32768);
+
+    this._applyMaster(true);
   }
 
   resume() { this._init(); if (this.ctx.state !== 'running') this.ctx.resume(); }
@@ -34,9 +94,28 @@ export class AudioEngine {
     this.filters[i].gain.setTargetAtTime(db, this.ctx.currentTime, 0.015);
   }
 
-  setMaster(v) {
-    this.pendingMaster = v;
-    if (this.master) this.master.gain.setTargetAtTime(v, this.ctx.currentTime, 0.015);
+  // Apply a mastering preset (from eq.js) to everything after the EQ. Pass null for transparent defaults.
+  // Fader (EQ) values are set separately through setGain().
+  applyMaster(preset) {
+    this.master_ = preset ? { ...preset } : DEFAULT_MASTER;
+    if (this.ctx) this._applyMaster(false);
+  }
+
+  _applyMaster(immediate) {
+    const p = this.master_, t = this.ctx.currentTime, tc = immediate ? 0.001 : 0.02;
+    const set = (param, v) => param.setTargetAtTime(v, t, tc);
+    const dyn = (node, d) => {
+      set(node.threshold, clamp(d.threshold, -100, 0)); set(node.knee, clamp(d.knee, 0, 40));
+      set(node.ratio, clamp(d.ratio, 1, 20)); set(node.attack, clamp(d.attack, 0, 1)); set(node.release, clamp(d.release, 0, 1));
+    };
+    const meterOnly = !!p.analyzeOnly;
+    dyn(this.comp, p.comp); dyn(this.limiter, p.limiter);
+    set(this.makeup.gain, meterOnly ? 1 : (p.comp.makeup ?? 1));
+    // `saturation` is an amount: parallel wet mix = 5x amount (0.06 -> 30% wet)
+    const wet = meterOnly ? 0 : clamp(p.saturation * 5, 0, 1);
+    set(this.wet.gain, wet); set(this.dry.gain, 1 - wet);
+    set(this.sideSum.gain, meterOnly ? 1 : p.spread);
+    set(this.master.gain, p.masterGain);
   }
 
   spectrum(out) {
@@ -45,10 +124,28 @@ export class AudioEngine {
     return Math.min(out.length, this.analyser.frequencyBinCount);
   }
 
+  // Approximate meters at the output. lufs: momentary (400 ms) K-weighted loudness.
+  // peak: sample peak in dBFS (no oversampling, so it can under-read true peak by a fraction of a dB).
+  meter() {
+    if (!this.kAn || !this.playing) return null;
+    const buf = this._kBuf, n = Math.min(Math.ceil(0.4 * this.ctx.sampleRate), buf.length);
+    let power = 0;
+    for (const a of this.kAn) {
+      a.getFloatTimeDomainData(buf);
+      let s = 0; for (let i = buf.length - n; i < buf.length; i++) s += buf[i] * buf[i];
+      power += s / n;
+    }
+    let pk = 0;
+    for (const a of this.peakAn) {
+      a.getFloatTimeDomainData(this._peakBuf);
+      for (let i = 0; i < this._peakBuf.length; i++) pk = Math.max(pk, Math.abs(this._peakBuf[i]));
+    }
+    return { lufs: toDb(power) - 0.691, peak: 20 * Math.log10(Math.max(pk, 1e-6)) };
+  }
+
   async start(kind, file) {
     this.resume();
     this.stop();
-    const ctx = this.ctx;
     if (kind === 'synth') this._synth();
     else if (kind === 'noise') this._noise();
     else if (kind === 'mic') await this._mic();

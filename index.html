@@ -4,27 +4,38 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>3D Touch EQ</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Jost:wght@400;500;600&display=swap">
 <style>
-  :root { --bg:#0b0d14; --fg:#e8ecf5; --muted:#8892a8; --accent:#5ee1ff; }
+  /* Tactile elegance: machined graphite desk, aluminum caps, brass and copper indicators, warm key light. */
+  :root {
+    --bg:#121316; --panel:#1b1d21; --edge:#33363d; --ink:#e9e6df; --muted:#8f8c84;
+    --brass:#d2ad6a; --copper:#cf7f5c; --steel:#9fc0d4;
+    --label:"Jost", "Futura", "Avenir Next", system-ui, sans-serif;
+    --mono:"IBM Plex Mono", ui-monospace, Menlo, monospace;
+  }
   * { box-sizing:border-box; }
-  html, body { margin:0; height:100%; background:var(--bg); color:var(--fg);
-    font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; overflow:hidden; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--ink); font-family:var(--label); overflow:hidden; }
   canvas { display:block; touch-action:none; }
-  #bar { position:fixed; left:0; right:0; top:0; display:flex; flex-wrap:wrap; gap:8px;
-    align-items:center; padding:10px 16px; background:linear-gradient(#0b0d14ee,#0b0d1400); z-index:2; }
-  #bar h1 { font-size:15px; margin:0 8px 0 0; letter-spacing:.08em; text-transform:uppercase; }
-  button, label.btn { background:#1a2030; color:var(--fg); border:1px solid #2c3550; border-radius:8px;
-    padding:8px 14px; font-size:14px; cursor:pointer; }
-  button:active, label.btn:active { background:#26304a; }
-  button.on { border-color:var(--accent); color:var(--accent); }
-  select { background:#1a2030; color:var(--fg); border:1px solid #2c3550; border-radius:8px; padding:8px; font-size:14px; }
+  #bar { position:fixed; left:0; right:0; top:0; display:flex; flex-wrap:wrap; gap:8px; align-items:center;
+    padding:12px 16px; z-index:2; background:linear-gradient(#121316f2, #12131600); }
+  #bar h1 { font-size:12px; font-weight:500; margin:0 10px 0 0; letter-spacing:.28em; text-transform:uppercase; color:var(--muted); }
+  button, label.btn, select {
+    font:500 12px var(--label); letter-spacing:.1em; text-transform:uppercase; color:var(--ink);
+    padding:9px 15px; border-radius:10px; border:1px solid var(--edge); cursor:pointer;
+    background:linear-gradient(#2a2d33, #1c1e23); box-shadow:inset 0 1px 0 #ffffff12, 0 1px 2px #0008;
+  }
+  select { text-transform:none; letter-spacing:.04em; font-size:13px; padding-right:10px; }
+  button:active, label.btn:active { background:linear-gradient(#1c1e23, #25282e); box-shadow:inset 0 1px 3px #000a; }
+  button.on { color:var(--brass); border-color:#6f5a34; box-shadow:inset 0 1px 0 #ffffff12, 0 0 14px #d2ad6a33; }
+  button:focus-visible, select:focus-visible, label.btn:focus-within { outline:2px solid var(--brass); outline-offset:2px; }
   input[type=file] { display:none; }
-  #hint { position:fixed; left:0; right:0; bottom:10px; text-align:center; font-size:12px; color:var(--muted);
-    pointer-events:none; padding:0 16px; }
-  #meter { position:fixed; right:16px; bottom:34px; font:12px ui-monospace,Menlo,monospace; color:var(--muted);
-    text-align:right; line-height:1.6; pointer-events:none; }
-  #readout { position:fixed; right:16px; top:56px; font:12px ui-monospace,Menlo,monospace; color:var(--muted);
-    text-align:right; line-height:1.6; pointer-events:none; }
+  #hint { position:fixed; left:0; right:0; bottom:10px; text-align:center; font-size:12px; letter-spacing:.04em;
+    color:var(--muted); pointer-events:none; padding:0 16px; }
+  #readout, #meter { position:fixed; right:16px; font:400 12px var(--mono); color:var(--muted); text-align:right;
+    line-height:1.7; pointer-events:none; }
+  #readout { top:60px; }
+  #meter { bottom:34px; }
+  #readout b, #meter b { color:var(--ink); font-weight:500; }
 </style>
 </head>
 <body>
@@ -46,7 +57,7 @@
 </div>
 <div id="readout"></div>
 <div id="meter"></div>
-<div id="hint">Drag a fader up/down to change that band live · drag the background to orbit · pinch/scroll to zoom · double-tap a fader to reset it</div>
+<div id="hint">Drag a fader to shape that band live · drag the background to orbit · pinch or scroll to zoom · double-tap a fader to reset it</div>
 
 <script type="importmap">{"imports":{"three":"./vendor/three.module.js"}}</script>
 <script type="module">
@@ -57,94 +68,173 @@ import { AudioEngine } from './audio.js';
 const BANDS = EQ.bands;                       // [{name, type, freq, q, color}]
 const RANGE = EQ.rangeDb;                     // ±dB
 const TRACK_H = 3;                            // fader travel in world units
+const DESK_Y = -2.1;                          // top surface of the desk
 const dbToY = db => (db / RANGE) * (TRACK_H / 2);
 const yToDb = y => Math.max(-RANGE, Math.min(RANGE, (y / (TRACK_H / 2)) * RANGE));
+
+// Indicator colors for the visual design (eq.js keeps its own band colors untouched).
+const SKIN = { LOW:'#cf7f5c', MID:'#d2ad6a', HIGH:'#9fc0d4' };
+const skin = band => SKIN[band.name] ?? band.color;
+const INK = '#e9e6df', MUTED = '#8f8c84';
+const LABEL_FONT = '"Jost", "Futura", system-ui, sans-serif', MONO_FONT = '"IBM Plex Mono", ui-monospace, Menlo, monospace';
 
 const audio = new AudioEngine(BANDS);
 
 // ---------- scene ----------
 const renderer = new THREE.WebGLRenderer({ antialias:true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.1;
 document.body.appendChild(renderer.domElement);
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0b0d14);
-scene.fog = new THREE.Fog(0x0b0d14, 12, 30);
-const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
-scene.add(new THREE.AmbientLight(0xffffff, 0.5));
-const key = new THREE.DirectionalLight(0xffffff, 1.2); key.position.set(4, 8, 6); scene.add(key);
+scene.background = new THREE.Color(0x121316);
+scene.fog = new THREE.Fog(0x121316, 14, 34);
+const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
 
-// floor grid
-const grid = new THREE.GridHelper(30, 30, 0x2c3550, 0x161c2c); grid.position.y = -TRACK_H/2 - 0.6; scene.add(grid);
+// A tiny studio for the metal to reflect: dark room, a big overhead softbox and a warm strip light.
+(function makeEnv() {
+  const env = new THREE.Scene();
+  env.add(new THREE.Mesh(new THREE.BoxGeometry(24, 12, 24), new THREE.MeshBasicMaterial({ color:0x1a1b1f, side:THREE.BackSide })));
+  const panel = (w, h, color, k, pos, rx, ry) => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color:new THREE.Color(color).multiplyScalar(k), side:THREE.DoubleSide }));
+    m.position.set(...pos); m.rotation.set(rx, ry, 0); env.add(m);
+  };
+  panel(10, 5, 0xffffff, 6, [0, 5.5, 1], Math.PI / 2, 0);
+  panel(1.2, 7, 0xffd9a8, 8, [-9, 0, 2], 0, Math.PI / 2);
+  panel(0.8, 6, 0x9db4d6, 4, [9, 0, -3], 0, -Math.PI / 2);
+  scene.environment = new THREE.PMREMGenerator(renderer).fromScene(env, 0.04).texture;
+})();
 
-// spectrum bars behind the faders
-const NBARS = 48;
-const bars = [];
-const barGeo = new THREE.BoxGeometry(0.22, 1, 0.22);
+scene.add(new THREE.AmbientLight(0xffffff, 0.12));
+const key = new THREE.DirectionalLight(0xffe6c4, 2.4); key.position.set(4, 8, 6); key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048); key.shadow.bias = -0.0005; key.shadow.normalBias = 0.02;
+Object.assign(key.shadow.camera, { left:-9, right:9, top:9, bottom:-9, near:1, far:26 });
+scene.add(key);
+const rim = new THREE.DirectionalLight(0x9db4d6, 0.9); rim.position.set(-5, 3, -6); scene.add(rim);
+
+function roundedBox(w, h, d, r, b) {            // rounded-rectangle slab with a soft machined edge; extruded along z
+  const x = -w / 2, y = -h / 2, s = new THREE.Shape();
+  s.moveTo(x + r, y); s.lineTo(x + w - r, y); s.quadraticCurveTo(x + w, y, x + w, y + r);
+  s.lineTo(x + w, y + h - r); s.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  s.lineTo(x + r, y + h); s.quadraticCurveTo(x, y + h, x, y + h - r);
+  s.lineTo(x, y + r); s.quadraticCurveTo(x, y, x + r, y);
+  const g = new THREE.ExtrudeGeometry(s, { depth:d - 2 * b, bevelEnabled:true, bevelThickness:b, bevelSize:b, bevelSegments:3, curveSegments:8 });
+  g.translate(0, 0, -(d - 2 * b) / 2);
+  return g;
+}
+function brushedTexture() {                      // fine horizontal streaks for the anodized desk top
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const x = c.getContext('2d'); x.fillStyle = '#808080'; x.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 1600; i++) {
+    const v = 100 + Math.random() * 60;
+    x.strokeStyle = `rgba(${v},${v},${v},0.18)`; x.lineWidth = 1;
+    const y = Math.random() * 256, x0 = Math.random() * 256;
+    x.beginPath(); x.moveTo(x0, y); x.lineTo(x0 + 40 + Math.random() * 160, y); x.stroke();
+  }
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(0.25, 0.25); return t;
+}
+
+// desk and ground
+const desk = new THREE.Mesh(roundedBox(12.4, 6.4, 0.4, 0.35, 0.06).rotateX(-Math.PI / 2),
+  new THREE.MeshStandardMaterial({ color:0x2a2c32, metalness:0.75, roughness:0.4, bumpMap:brushedTexture(), bumpScale:0.5, envMapIntensity:0.6 }));
+desk.position.set(0, DESK_Y - 0.2, -0.8); desk.receiveShadow = true; scene.add(desk);
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(80, 80).rotateX(-Math.PI / 2), new THREE.ShadowMaterial({ opacity:0.5 }));   // shadow only: the desk floats in the dark
+ground.position.y = DESK_Y - 0.7; ground.receiveShadow = true; scene.add(ground);
+
+// spectrum: slim brass-to-ivory light columns standing on the desk behind the faders
+const NBARS = 48, bars = [];
+const barGeo = new THREE.BoxGeometry(0.09, 1, 0.09);
 for (let i = 0; i < NBARS; i++) {
-  const m = new THREE.MeshStandardMaterial({ color:new THREE.Color().setHSL(0.55 + 0.45 * i / NBARS, 0.8, 0.55), emissiveIntensity:0.4 });
-  m.emissive = m.color.clone().multiplyScalar(0.4);
-  const b = new THREE.Mesh(barGeo, m);
-  b.position.set((i - NBARS/2) * 0.27, -TRACK_H/2 - 0.6, -3);
+  const col = new THREE.Color(0xe9e6df).lerp(new THREE.Color(0xd2ad6a), i / (NBARS - 1));
+  const b = new THREE.Mesh(barGeo, new THREE.MeshStandardMaterial({ color:col, emissive:col, emissiveIntensity:0.35, roughness:0.4, metalness:0.2 }));
+  b.position.set((i - (NBARS - 1) / 2) * 0.2, DESK_Y, -3);
   scene.add(b); bars.push(b);
+}
+
+// canvas-drawn engravings (redrawn once the web fonts arrive)
+const redraws = [];
+function engraving(w, h, draw, mat) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
+  const paint = () => { const x = c.getContext('2d'); x.clearRect(0, 0, w, h); draw(x, w, h); tex.needsUpdate = true; };
+  paint(); redraws.push(paint); return { c, tex, paint };
+}
+const PX = 320;                                  // scale-plane pixels per world unit
+const scaleTick = db => Math.round(TRACK_H / 2 * PX * (db / RANGE));
+function drawScale(x, w, h) {
+  x.textBaseline = 'middle';
+  for (let db = -RANGE; db <= RANGE; db++) {
+    const y = h / 2 - scaleTick(db), major = db % 5 === 0;
+    x.strokeStyle = db === 0 ? 'rgba(233,230,223,1)' : (major ? 'rgba(233,230,223,.85)' : 'rgba(233,230,223,.4)');
+    x.lineWidth = major ? 3 : 2; x.beginPath(); x.moveTo(w - 4, y); x.lineTo(w - (major ? 44 : 24), y); x.stroke();
+    if (major) { x.fillStyle = db === 0 ? INK : '#b9b5ab'; x.font = `500 32px ${MONO_FONT}`; x.textAlign = 'right';
+      x.fillText(db > 0 ? `+${db}` : db < 0 ? `−${-db}` : '0', w - 56, y); }
+  }
 }
 
 // faders
 const faders = BANDS.map((band, i) => {
-  const x = (i - 1) * 2.4;
-  const g = new THREE.Group(); g.position.x = x; scene.add(g);
-  const color = new THREE.Color(band.color);
+  const g = new THREE.Group(); g.position.x = (i - 1) * 2.7; scene.add(g);
+  const color = new THREE.Color(skin(band));
+  const metal = (c, m, r, e = 1) => new THREE.MeshStandardMaterial({ color:c, metalness:m, roughness:r, envMapIntensity:e });
+  const add = (mesh, parent = g) => { mesh.castShadow = true; parent.add(mesh); return mesh; };
 
-  const slot = new THREE.Mesh(new THREE.BoxGeometry(0.16, TRACK_H + 0.4, 0.16),
-    new THREE.MeshStandardMaterial({ color:0x1a2030, roughness:0.6 }));
-  g.add(slot);
-  // tick marks: -max, 0, +max
-  [-RANGE, 0, RANGE].forEach(db => {
-    const t = new THREE.Mesh(new THREE.BoxGeometry(db === 0 ? 1.1 : 0.7, 0.03, 0.03),
-      new THREE.MeshBasicMaterial({ color: db === 0 ? 0x5a6688 : 0x2c3550 }));
-    t.position.y = dbToY(db); g.add(t);
-  });
-  // glowing fill from 0 dB to handle
-  const fill = new THREE.Mesh(new THREE.BoxGeometry(0.22, 1, 0.22),
-    new THREE.MeshStandardMaterial({ color, emissive:color, emissiveIntensity:0.8 }));
-  g.add(fill);
-  // handle
-  const handle = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.38, 0.6),
-    new THREE.MeshStandardMaterial({ color:0xdfe6f5, metalness:0.4, roughness:0.35, emissive:color, emissiveIntensity:0.15 }));
-  handle.userData.index = i; g.add(handle);
-  // generous invisible touch target
-  const hit = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.0, 1.2), new THREE.MeshBasicMaterial({ visible:false }));
-  hit.userData.index = i; handle.add(hit);
+  // socket, slot with two machined rails, engraved dB scale
+  add(new THREE.Mesh(roundedBox(0.8, 0.4, 0.6, 0.08, 0.03), metal(0x1d1f23, 0.8, 0.4))).position.y = DESK_Y + 0.2;
+  const slot = new THREE.Mesh(new THREE.BoxGeometry(0.12, TRACK_H + 0.4, 0.1), metal(0x050607, 0.2, 0.9)); g.add(slot);
+  for (const sx of [-0.1, 0.1]) { const r = add(new THREE.Mesh(new THREE.BoxGeometry(0.03, TRACK_H + 0.4, 0.14), metal(0x8d9097, 0.9, 0.35))); r.position.x = sx; }
+  const sc = engraving(224, Math.round((TRACK_H + 0.4) * PX), drawScale);
+  const scale = new THREE.Mesh(new THREE.PlaneGeometry(224 / PX, TRACK_H + 0.4), new THREE.MeshBasicMaterial({ map:sc.tex, transparent:true, depthWrite:false }));
+  scale.position.set(-0.2 - 112 / PX, 0, 0.072); g.add(scale);
 
-  // label sprite
-  const label = makeLabel(band.name, band.freqLabel, band.color);
-  label.position.set(0, -TRACK_H/2 - 0.55, 0.3);
-  g.add(label);
-  const value = makeValueSprite();
-  value.position.set(0, TRACK_H/2 + 0.6, 0);
-  g.add(value);
+  // lit inlay from 0 dB to the cap
+  const fill = new THREE.Mesh(new THREE.BoxGeometry(0.05, 1, 0.04), new THREE.MeshStandardMaterial({ color, emissive:color, emissiveIntensity:1.3, roughness:0.4 }));
+  fill.position.z = 0.055; g.add(fill);
 
-  return { band, group:g, handle, hit, fill, value, db:0 };
+  // cap: machined aluminum, ridged grip, lit indicator line
+  const handle = new THREE.Group(); g.add(handle);
+  add(new THREE.Mesh(roundedBox(0.95, 0.5, 0.5, 0.08, 0.05), metal(0xc9ccd1, 0.95, 0.28, 1.25)), handle).position.z = 0.0;
+  for (const gy of [-0.17, -0.1, 0.1, 0.17]) {
+    const gr = new THREE.Mesh(new THREE.BoxGeometry(0.84, 0.016, 0.02), metal(0x2a2c30, 0.5, 0.5)); gr.position.set(0, gy, 0.255); handle.add(gr);
+  }
+  const glow = new THREE.Mesh(new THREE.BoxGeometry(0.84, 0.03, 0.02), new THREE.MeshStandardMaterial({ color, emissive:color, emissiveIntensity:0.9, roughness:0.3 }));
+  glow.position.set(0, 0, 0.256); handle.add(glow);
+  const hit = new THREE.Mesh(new THREE.BoxGeometry(1.7, 1.0, 1.2), new THREE.MeshBasicMaterial({ visible:false })); handle.add(hit);
+  handle.traverse(o => { if (o.isMesh) o.userData.index = i; });
+
+  const label = makeLabel(band.name, band.freqLabel, skin(band));
+  label.position.set(0, DESK_Y + 0.42, 0.95); g.add(label);
+  const value = makeValueSprite(); value.position.set(0, TRACK_H / 2 + 0.55, 0); g.add(value);
+
+  return { band, group:g, handle, hit, fill, glow, value, db:0 };
 });
 
 function makeLabel(name, sub, color) {
-  const c = document.createElement('canvas'); c.width = 256; c.height = 128;
-  const x = c.getContext('2d');
-  x.textAlign = 'center'; x.fillStyle = color; x.font = 'bold 54px system-ui'; x.fillText(name, 128, 62);
-  x.fillStyle = '#8892a8'; x.font = '30px system-ui'; x.fillText(sub, 128, 106);
-  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map:new THREE.CanvasTexture(c), transparent:true, depthWrite:false }));
+  const e = engraving(256, 128, (x, w) => {
+    x.textAlign = 'center'; x.textBaseline = 'alphabetic';
+    x.fillStyle = color; x.font = `600 50px ${LABEL_FONT}`; try { x.letterSpacing = '6px'; } catch {}
+    x.fillText(name, w / 2 + 3, 64);
+    x.fillStyle = MUTED; x.font = `400 26px ${MONO_FONT}`; try { x.letterSpacing = '0px'; } catch {}
+    x.fillText(sub, w / 2, 104);
+  });
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map:e.tex, transparent:true, depthWrite:false }));
   s.scale.set(1.6, 0.8, 1); return s;
 }
 function makeValueSprite() {
   const c = document.createElement('canvas'); c.width = 256; c.height = 96;
-  const tex = new THREE.CanvasTexture(c);
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map:tex, transparent:true, depthWrite:false }));
   s.scale.set(1.6, 0.6, 1); s.userData = { c, tex }; return s;
 }
 function drawValue(sprite, db) {
-  const { c, tex } = sprite.userData; const x = c.getContext('2d');
-  x.clearRect(0, 0, c.width, c.height);
-  x.textAlign = 'center'; x.fillStyle = '#e8ecf5'; x.font = 'bold 44px ui-monospace,Menlo,monospace';
-  x.fillText((db > 0 ? '+' : '') + db.toFixed(1) + ' dB', 128, 62);
+  const { c, tex } = sprite.userData, x = c.getContext('2d');
+  x.clearRect(0, 0, c.width, c.height); x.textBaseline = 'alphabetic'; x.textAlign = 'left';
+  const num = (db > 0 ? '+' : db < 0 ? '−' : '') + Math.abs(db).toFixed(1);
+  x.font = `500 46px ${MONO_FONT}`; const w1 = x.measureText(num).width;
+  x.font = `400 24px ${MONO_FONT}`; const w2 = x.measureText(' dB').width;
+  const x0 = (c.width - (w1 + w2)) / 2;
+  x.fillStyle = INK; x.font = `500 46px ${MONO_FONT}`; x.fillText(num, x0, 62);
+  x.fillStyle = MUTED; x.font = `400 24px ${MONO_FONT}`; x.fillText(' dB', x0 + w1, 62);
   tex.needsUpdate = true;
 }
 
@@ -160,18 +250,21 @@ function setFader(i, db, fromUser = true) {
   renderReadout();
 }
 function renderReadout() {
+  const sign = d => (d > 0 ? '+' : d < 0 ? '−' : '') + Math.abs(d).toFixed(1);
   document.getElementById('readout').innerHTML = faders.map(f =>
-    `${f.band.name} ${f.band.freqLabel}: <b style="color:${f.band.color}">${f.db > 0 ? '+' : ''}${f.db.toFixed(1)} dB</b>`).join('<br>');
+    `<span style="color:${skin(f.band)}">●</span> ${f.band.name} ${f.band.freqLabel} <b>${sign(f.db)} dB</b>`).join('<br>');
 }
 faders.forEach((_, i) => setFader(i, 0, false));
+document.fonts?.ready.then(() => { redraws.forEach(p => p()); faders.forEach(f => drawValue(f.value, f.db)); });
 
 // ---------- interaction (pointer events = mouse + touch + pen, multi-touch capable) ----------
 const ray = new THREE.Raycaster();
 const ndc = new THREE.Vector2();
 const active = new Map();     // pointerId -> {kind:'fader'|'orbit', ...}
 const el = renderer.domElement;
-const orbit = { theta:0, phi:0.2, dist:9, target:new THREE.Vector3(0, 0, 0) };
+const orbit = { theta:0, phi:0.3, dist:11, target:new THREE.Vector3(0, -0.2, 0) };
 const pinch = { d:0 };
+const pickables = faders.flatMap(f => { const m = []; f.handle.traverse(o => { if (o.isMesh) m.push(o); }); return m; });
 
 function setNdc(e) {
   const r = el.getBoundingClientRect();
@@ -191,7 +284,7 @@ let lastTap = { t:0, i:-1 };
 el.addEventListener('pointerdown', e => {
   el.setPointerCapture(e.pointerId);
   setNdc(e); ray.setFromCamera(ndc, camera);
-  const hits = ray.intersectObjects(faders.flatMap(f => [f.hit, f.handle]), false);
+  const hits = ray.intersectObjects(pickables, false);
   if (hits.length) {
     const i = hits[0].object.userData.index;
     const now = performance.now();
@@ -200,7 +293,7 @@ el.addEventListener('pointerdown', e => {
     const f = faders[i];
     const grabDb = pointerToDb(e, f);
     active.set(e.pointerId, { kind:'fader', i, offset: grabDb == null ? 0 : f.db - grabDb });
-    f.handle.material.emissiveIntensity = 0.6;
+    f.glow.material.emissiveIntensity = 2.6;
     audio.resume();
   } else {
     active.set(e.pointerId, { kind:'orbit', x:e.clientX, y:e.clientY });
@@ -218,21 +311,21 @@ el.addEventListener('pointermove', e => {
       a.x = e.clientX; a.y = e.clientY;
       const [p, q] = pts.map(([, v]) => v);
       const d = Math.hypot(p.x - q.x, p.y - q.y);
-      if (pinch.d) orbit.dist = Math.max(4, Math.min(20, orbit.dist * (pinch.d / d)));
+      if (pinch.d) orbit.dist = Math.max(5, Math.min(22, orbit.dist * (pinch.d / d)));
       pinch.d = d; return;
     }
     orbit.theta -= (e.clientX - a.x) * 0.006;
-    orbit.phi = Math.max(-0.2, Math.min(1.2, orbit.phi + (e.clientY - a.y) * 0.006));
+    orbit.phi = Math.max(-0.1, Math.min(1.2, orbit.phi + (e.clientY - a.y) * 0.006));
     a.x = e.clientX; a.y = e.clientY;
   }
 });
 const end = e => {
   const a = active.get(e.pointerId);
-  if (a && a.kind === 'fader') faders[a.i].handle.material.emissiveIntensity = 0.15;
+  if (a && a.kind === 'fader') faders[a.i].glow.material.emissiveIntensity = 0.9;
   active.delete(e.pointerId); pinch.d = 0;
 };
 el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
-el.addEventListener('wheel', e => { e.preventDefault(); orbit.dist = Math.max(4, Math.min(20, orbit.dist * (1 + e.deltaY * 0.001))); }, { passive:false });
+el.addEventListener('wheel', e => { e.preventDefault(); orbit.dist = Math.max(5, Math.min(22, orbit.dist * (1 + e.deltaY * 0.001))); }, { passive:false });
 
 // ---------- UI ----------
 const playBtn = document.getElementById('play');
@@ -276,10 +369,10 @@ function updateMeter(now) {
   if (now - lastMeter < 100) return; lastMeter = now;
   const m = audio.meter();
   if (!m) { meterEl.textContent = ''; return; }
-  const fmt = v => (isFinite(v) ? v.toFixed(1) : '—');
+  const fmt = v => (isFinite(v) ? v.toFixed(1).replace('-', '−') : '—');
   const lt = currentPreset?.lufsTarget, pl = currentPreset?.truePeakLimit;
-  const hot = (pl != null && m.peak > pl) ? '#ff6b6b' : 'inherit';
-  meterEl.innerHTML = `Loudness (momentary) <b>${fmt(m.lufs)} LUFS</b>${lt != null ? ` · target ${lt}` : ''}<br>` +
+  const hot = (pl != null && m.peak > pl) ? 'var(--copper)' : 'inherit';
+  meterEl.innerHTML = `Loudness <b>${fmt(m.lufs)} LUFS</b>${lt != null ? ` · target ${lt}` : ''}<br>` +
     `Peak <b style="color:${hot}">${fmt(m.peak)} dBFS</b>${pl != null ? ` · limit ${pl}` : ''}`;
 }
 
@@ -287,11 +380,10 @@ function updateMeter(now) {
 function resize() {
   const w = innerWidth, h = innerHeight;
   renderer.setSize(w, h); camera.aspect = w / h;
-  orbit.baseDist = w < h ? 12 : 9;
   camera.updateProjectionMatrix();
 }
 addEventListener('resize', resize); resize();
-orbit.dist = innerWidth < innerHeight ? 12 : 9;
+orbit.dist = innerWidth < innerHeight ? 15 : 11;
 
 const spec = new Uint8Array(1024);
 function frame(now) {
@@ -308,7 +400,7 @@ function frame(now) {
     const v = n ? spec[Math.floor(Math.pow(i / NBARS, 2.2) * (n - 1))] / 255 : 0;
     const h = 0.05 + v * 3.2;
     bars[i].scale.y += (h - bars[i].scale.y) * 0.4;
-    bars[i].position.y = -TRACK_H/2 - 0.6 + bars[i].scale.y / 2;
+    bars[i].position.y = DESK_Y + bars[i].scale.y / 2;
   }
   renderer.render(scene, camera);
 }

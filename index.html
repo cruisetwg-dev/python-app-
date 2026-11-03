@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Cruise Mixed</title>
+<title>Cruise MixEdit</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Jost:wght@400;500;600&display=swap">
 <style>
   /* Tactile elegance: machined graphite desk, aluminum caps, brass and copper indicators, warm key light. */
@@ -21,6 +21,8 @@
   #bar h1 { display:flex; align-items:center; gap:10px; font-size:12px; font-weight:500; margin:0 10px 0 0; letter-spacing:.28em; text-transform:uppercase; color:var(--ink); }
   .badge { width:34px; height:34px; border-radius:50%; background:#000; border:1px solid var(--edge); box-shadow:0 0 12px #d2ad6a22; display:grid; place-items:center; flex:none; }
   .badge img { width:76%; height:76%; display:block; }
+  .word { font-weight:300; letter-spacing:.34em; font-size:13px; white-space:nowrap; }
+  .word b { font-weight:600; font-style:italic; letter-spacing:.2em; margin-right:.7em; }
   button, label.btn, select {
     font:500 12px var(--label); letter-spacing:.1em; text-transform:uppercase; color:var(--ink);
     padding:9px 15px; border-radius:10px; border:1px solid var(--edge); cursor:pointer;
@@ -42,7 +44,7 @@
 </head>
 <body>
 <div id="bar">
-  <h1><span class="badge"><img src="./assets/cm-logo.png" alt=""></span>Cruise Mixed</h1>
+  <h1><span class="badge"><img src="./assets/cm-logo.png" alt=""></span><span class="word"><b>Cruise</b>MixEdit</span></h1>
   <button id="play">▶ Start</button>
   <select id="source" aria-label="Audio source">
     <option value="synth">Demo loop</option>

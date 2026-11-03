@@ -168,7 +168,7 @@ wall.position.set(0, 2.2, -4.3); wall.receiveShadow = true; scene.add(wall);
 // Backdrop mural: the CRUISEMIXEDIT "Era of the Engineer" artwork, hands over the face. Black falls away into the wall.
 // It plays the EQ back as light: left hand glows copper with the lows, the name flares brass with the mids,
 // the right hand goes steel-blue with the highs. Brass glints twinkle on the fingers like rings catching a light.
-const HANDS_SRC = './assets/cruisemixedit-hands.png';
+const HANDS_SRC = './assets/cruisemixedit-hands-spray.png';
 const MURAL = { w: 7, h: 7 * 1009 / 1024, y: 3.0, z: -4.28 };
 const mural = (() => {
   const tex = new THREE.TextureLoader().load(HANDS_SRC, () => seedGlints(tex.image)); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
@@ -206,7 +206,7 @@ function seedGlints(img) {
   const starTex = new THREE.CanvasTexture(sc);
   for (let t = 0, n = 0; t < 20000 && n < 14; t++) {
     const px = Math.random() * c.width | 0, py = (c.height * (0.08 + Math.random() * 0.55)) | 0;   // upper two-thirds: fingers and knuckles
-    if (d[(py * c.width + px) * 4 + 3] > 215) {
+    if (d[(py * c.width + px) * 4 + 3] > 170) {
       const s = new THREE.Sprite(new THREE.SpriteMaterial({ map:starTex, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false, opacity:0 }));
       s.position.set((px / c.width - 0.5) * MURAL.w * 1.15, MURAL.y + (0.5 - py / c.height) * MURAL.h * 1.15, MURAL.z + 0.05);
       s.scale.setScalar(0.14 + Math.random() * 0.16); s.userData.phase = Math.random() * 6.283; s.userData.rate = 0.8 + Math.random() * 1.6;

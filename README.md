@@ -30,3 +30,6 @@ three faders to the preset's EQ values and configures saturation, stereo spread,
 
 The meter (bottom right) shows approximate momentary loudness (K-weighted, 400 ms) and sample peak. Presets do not
 auto-normalise to their LUFS target; the target is shown so you can ride the faders/source level toward it.
+
+## Branding assets
+`assets/cm-logo.png` (the Cm monogram, used as the toolbar badge) and `assets/cruisemixedit-hands.png` (the backdrop mural) are part of the Cruise MixEdit identity.

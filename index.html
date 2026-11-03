@@ -165,72 +165,56 @@ const wallTex = (() => {
 const wall = new THREE.Mesh(new THREE.PlaneGeometry(16, 9), new THREE.MeshStandardMaterial({ color:0x1b1c21, roughness:0.95, bumpMap:wallTex, bumpScale:0.8 }));
 wall.position.set(0, 2.2, -4.3); wall.receiveShadow = true; scene.add(wall);
 
-const LOGO_SRC = './assets/cm-logo.png';        // ivory brush strokes of the "Cm" monogram on a transparent background
-const graffiti = (() => {
-  const W = 1792, H = 1024, IVORY = '#e9e6df', BRASS = '#d2ad6a';
-  const c = document.createElement('canvas'); c.width = W; c.height = H;
-  const x = c.getContext('2d');
-  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
-  const m = new THREE.Mesh(new THREE.PlaneGeometry(14, 8), new THREE.MeshBasicMaterial({ map:tex, transparent:true, opacity:0.55, depthWrite:false, toneMapped:false }));
-  m.scale.setScalar(0.45); m.position.set(0, 3.35, -4.28); scene.add(m);   // hangs above the faders, clear of the readouts
-
-  // spray: three soft passes (haze, glow, core), each drawn twice with a shaky hand, then overspray speckle near the line
-  const spray = (path, color, lw, speckle = 500) => {
-    for (const [mult, a, blur] of [[3.4, 0.10, 34], [1.9, 0.22, 14], [1, 0.85, 4]]) {
-      for (let j = 0; j < 2; j++) {
-        x.save(); x.translate((Math.random() - 0.5) * 2.2, (Math.random() - 0.5) * 2.2);
-        x.lineWidth = lw * mult * (j ? 0.8 : 1); x.globalAlpha = a * (j ? 0.6 : 1);
-        x.shadowBlur = blur; x.shadowColor = color; x.strokeStyle = color; x.lineCap = x.lineJoin = 'round';
-        x.stroke(path); x.restore();
-      }
-    }
-    x.save(); x.lineWidth = 30; let n = 0;
-    for (let t = 0; t < 16000 && n < speckle; t++) {
-      const px = 480 + Math.random() * 840, py = 20 + Math.random() * 990;
-      if (x.isPointInStroke(path, px, py)) { x.fillStyle = color; x.globalAlpha = 0.12 + Math.random() * 0.3; x.beginPath(); x.arc(px, py, 0.6 + Math.random() * 1.6, 0, 7); x.fill(); n++; }
-    }
-    x.restore();
-  };
-  const drip = (dx, y0, len, lw) => {                                       // a run of paint with a bead at the end
-    const p = new Path2D(); p.moveTo(dx, y0); p.lineTo(dx, y0 + len); spray(p, IVORY, lw, 60);
-    x.save(); x.fillStyle = IVORY; x.shadowColor = IVORY; x.shadowBlur = 10; x.globalAlpha = 0.9;
-    x.beginPath(); x.arc(dx, y0 + len, lw * 1.35, 0, 7); x.fill(); x.restore();
-  };
-  const star = (sx, sy, r) => { const p = new Path2D(); p.moveTo(sx, sy - r); p.quadraticCurveTo(sx, sy, sx + r, sy); p.quadraticCurveTo(sx, sy, sx, sy + r); p.quadraticCurveTo(sx, sy, sx - r, sy); p.quadraticCurveTo(sx, sy, sx, sy - r); return p; };
-
-  const img = new Image();
-  img.onload = () => {
-    const R = 330, cx = 896, cy = 400, D = 2 * R, ox = cx - R, oy = cy - R;
-    // the monogram: glow passes in brass, then the crisp ivory core, hand-shaken
-    const paint = (blur, color, alpha, jx, jy) => { x.save(); x.shadowColor = color; x.shadowBlur = blur; x.globalAlpha = alpha; x.drawImage(img, ox + jx, oy + jy, D, D); x.restore(); };
-    paint(44, BRASS, 0.40, 0, 0); paint(18, BRASS, 0.65, 0, 0); paint(2, IVORY, 0.60, 1.4, -1); paint(2, IVORY, 0.95, -0.8, 0.8);
-    // overspray: specks where the paint would drift off the strokes
-    const oc = document.createElement('canvas'); oc.width = oc.height = D; const ox2 = oc.getContext('2d'); ox2.drawImage(img, 0, 0, D, D);
-    const a = ox2.getImageData(0, 0, D, D).data, A = (px, py) => (px < 0 || py < 0 || px >= D || py >= D) ? 0 : a[(py * D + px) * 4 + 3];
-    x.save(); x.fillStyle = IVORY;
-    for (let t = 0, n = 0; t < 40000 && n < 900; t++) {
-      const px = Math.random() * D | 0, py = Math.random() * D | 0;
-      const ang = Math.random() * 6.283, d = 6 + Math.random() * 18;
-      if (A(px, py) < 30 && A(px + Math.cos(ang) * d | 0, py + Math.sin(ang) * d | 0) > 150) {
-        x.globalAlpha = 0.15 + Math.random() * 0.35; x.beginPath(); x.arc(ox + px, oy + py, 0.6 + Math.random() * 1.6, 0, 7); x.fill(); n++;
-      }
-    }
-    x.restore();
-    // brass ring around it
-    const ring = new Path2D(); ring.arc(cx, cy, R + 8, 0, Math.PI * 2); spray(ring, BRASS, 4.5, 700);
-    // drips: off the ring and off the feet of the "m"
-    drip(cx - 230, cy + Math.sqrt((R + 8) ** 2 - 230 ** 2) - 2, 120, 4); drip(cx + 240, cy + Math.sqrt((R + 8) ** 2 - 240 ** 2) - 2, 80, 3.5);
-    const lowest = fx => { for (let py = D - 1; py >= 0; py--) for (let dx = -6; dx <= 6; dx++) if (A((fx * D | 0) + dx, py) > 128) return py; return D * 0.8; };
-    drip(ox + D * 0.71, oy + lowest(0.71) - 2, 60, 3.5); drip(ox + D * 0.5, oy + lowest(0.5) - 2, 45, 3);
-    // stars
-    [[cx - 460, cy - 150, 22], [cx + 470, cy - 60, 16], [cx - 420, cy + 190, 12], [cx + 400, cy + 230, 20], [cx + 60, cy - 390, 12]]
-      .forEach(([sx, sy, r]) => spray(star(sx, sy, r), BRASS, 2.5, 60));
-    tex.needsUpdate = true;
-  };
-  img.src = LOGO_SRC;
-  return m;
+// Backdrop mural: the CRUISEMIXEDIT "Era of the Engineer" artwork, hands over the face. Black falls away into the wall.
+// It plays the EQ back as light: left hand glows copper with the lows, the name flares brass with the mids,
+// the right hand goes steel-blue with the highs. Brass glints twinkle on the fingers like rings catching a light.
+const HANDS_SRC = './assets/cruisemixedit-hands.png';
+const MURAL = { w: 7, h: 7 * 1009 / 1024, y: 3.0, z: -4.28 };
+const mural = (() => {
+  const tex = new THREE.TextureLoader().load(HANDS_SRC, () => seedGlints(tex.image)); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
+  const col = h => { const c = new THREE.Color(h); return new THREE.Vector3(c.r, c.g, c.b); };
+  const mat = new THREE.ShaderMaterial({
+    transparent:true, depthWrite:false,
+    uniforms:{ map:{ value:tex }, uBase:{ value:0.4 }, uLow:{ value:0 }, uMid:{ value:0 }, uHigh:{ value:0 },
+               cIvory:{ value:new THREE.Vector3(0.914, 0.902, 0.875) }, cCopper:{ value:new THREE.Vector3(0.95, 0.46, 0.27) },
+               cBrass:{ value:new THREE.Vector3(1.0, 0.80, 0.42) }, cSteel:{ value:new THREE.Vector3(0.52, 0.80, 0.98) } },
+    vertexShader:'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader:`varying vec2 vUv; uniform sampler2D map; uniform float uBase, uLow, uMid, uHigh; uniform vec3 cIvory, cCopper, cBrass, cSteel;
+      void main(){
+        float a = texture2D(map, vUv).a;
+        float L = smoothstep(0.62, 0.08, vUv.x) * uLow;                 // left hand
+        float R = smoothstep(0.38, 0.92, vUv.x) * uHigh;                // right hand
+        float N = exp(-pow((vUv.y - 0.53) / 0.07, 2.0)) * uMid;         // the name row
+        vec3 c = cIvory + cCopper * L * 1.5 + cSteel * R * 1.5 + cBrass * N * 1.6;
+        float k = uBase + 0.75 * (L + R + N);
+        gl_FragColor = vec4(c, a * clamp(k, 0.0, 1.0));
+      }`
+  });
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(MURAL.w, MURAL.h), mat);
+  m.scale.setScalar(1.15); m.position.set(0, MURAL.y, MURAL.z); scene.add(m); return m;
 })();
-let bass = 0;
+// glints: sampled from the brightest finger pixels once the artwork has loaded
+const glints = [];
+function seedGlints(img) {
+  const c = document.createElement('canvas'); c.width = 256; c.height = Math.round(256 * MURAL.h / MURAL.w);
+  const x = c.getContext('2d'); x.drawImage(img, 0, 0, c.width, c.height);
+  const d = x.getImageData(0, 0, c.width, c.height).data;
+  const sc = document.createElement('canvas'); sc.width = sc.height = 64; const sx = sc.getContext('2d');
+  const g = sx.createRadialGradient(32, 32, 0, 32, 32, 32); g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.25, 'rgba(255,225,160,0.55)'); g.addColorStop(1, 'rgba(255,200,100,0)');
+  sx.fillStyle = g; sx.fillRect(0, 0, 64, 64); sx.strokeStyle = 'rgba(255,240,200,.95)'; sx.lineWidth = 2;
+  sx.beginPath(); sx.moveTo(32, 2); sx.lineTo(32, 62); sx.moveTo(2, 32); sx.lineTo(62, 32); sx.stroke();
+  const starTex = new THREE.CanvasTexture(sc);
+  for (let t = 0, n = 0; t < 20000 && n < 14; t++) {
+    const px = Math.random() * c.width | 0, py = (c.height * (0.08 + Math.random() * 0.55)) | 0;   // upper two-thirds: fingers and knuckles
+    if (d[(py * c.width + px) * 4 + 3] > 215) {
+      const s = new THREE.Sprite(new THREE.SpriteMaterial({ map:starTex, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false, opacity:0 }));
+      s.position.set((px / c.width - 0.5) * MURAL.w * 1.15, MURAL.y + (0.5 - py / c.height) * MURAL.h * 1.15, MURAL.z + 0.05);
+      s.scale.setScalar(0.14 + Math.random() * 0.16); s.userData.phase = Math.random() * 6.283; s.userData.rate = 0.8 + Math.random() * 1.6;
+      scene.add(s); glints.push(s); n++;
+    }
+  }
+}
+const lvl = { low:0, mid:0, high:0 };
 
 // canvas-drawn engravings (redrawn once the web fonts arrive)
 const redraws = [];
@@ -343,7 +327,7 @@ const ray = new THREE.Raycaster();
 const ndc = new THREE.Vector2();
 const active = new Map();     // pointerId -> {kind:'fader'|'orbit', ...}
 const el = renderer.domElement;
-const orbit = { theta:0, phi:0.3, dist:12.5, target:new THREE.Vector3(0, 0.5, 0) };
+const orbit = { theta:0, phi:0.3, dist:12.5, target:new THREE.Vector3(0, 0.8, 0) };
 const pinch = { d:0 };
 const pickables = faders.flatMap(f => { const m = []; f.handle.traverse(o => { if (o.isMesh) m.push(o); }); return m; });
 
@@ -483,9 +467,12 @@ function frame(now) {
     bars[i].scale.y += (h - bars[i].scale.y) * 0.4;
     bars[i].position.y = DESK_Y + bars[i].scale.y / 2;
   }
-  let b = 0; if (n) { for (let i = 0; i < 6; i++) b += spec[i]; b /= 6 * 255; }
-  bass += (b - bass) * 0.25;
-  graffiti.material.opacity = 0.55 + 0.45 * Math.min(1, bass * 1.6);       // the ghost brightens on the low end
+  const band = (lo, hi) => { let b = 0; if (n) { for (let i = lo; i < hi; i++) b += spec[i]; b /= (hi - lo) * 255; } return Math.min(1, b * 1.7); };
+  const follow = (k, v) => { lvl[k] += (v - lvl[k]) * (v > lvl[k] ? 0.45 : 0.08); return lvl[k]; };   // fast attack, slow release
+  const U = mural.material.uniforms;
+  U.uLow.value = follow('low', band(1, 9)); U.uMid.value = follow('mid', band(20, 60)); U.uHigh.value = follow('high', band(150, 400));
+  const t = now * 0.001;
+  for (const s of glints) s.material.opacity = Math.max(0, Math.sin(t * s.userData.rate + s.userData.phase)) ** 6 * (0.35 + 0.65 * U.uHigh.value);
   renderer.render(scene, camera);
 }
 requestAnimationFrame(frame);

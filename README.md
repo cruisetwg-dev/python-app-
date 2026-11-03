@@ -36,5 +36,5 @@ auto-normalise to their LUFS target; the target is shown so you can ride the fad
 
 ## Signal-path bridge
 The sloped bridge at the front of the desk shows the real chain: IN, LOW, MID, HIGH, SAT, WIDTH, COMP, LIM, OUT, joined by
-glass tubes. It is dark by default. A stage lights when you touch it or when it is working (compressor/limiter reduction),
+glass tubes. Each stage between IN and OUT has a chrome toggle switch that bypasses it in the audio (up = in the chain, down = bypassed; a band's fader position is kept). Reset EQ puts every switch back up. It is dark by default. A stage lights when you touch it or when it is working (compressor/limiter reduction),
 and a soft pulse of light runs down the tubes on transients and on every change or preset.

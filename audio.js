@@ -24,6 +24,7 @@ function deepMerge(base, override) {
   return out;
 }
 
+const NEUTRAL_DYN = { threshold: 0, knee: 0, ratio: 1, attack: 0.003, release: 0.25 };   // a compressor that does nothing
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const toDb = x => (x > 1e-10 ? 10 * Math.log10(x) : -Infinity);
 
@@ -35,6 +36,7 @@ export class AudioEngine {
     this.stopSource = null;
     this.pending = bands.map(() => 0);        // gains set before the context exists
     this.master_ = DEFAULT_MASTER;            // mastering settings set before the context exists
+    this.byp = { eq:[false, false, false], sat:false, width:false, comp:false, lim:false };   // stage bypass switches
   }
 
   _init() {
@@ -44,7 +46,7 @@ export class AudioEngine {
 
     this.filters = this.bands.map((b, i) => {
       const f = ctx.createBiquadFilter();
-      f.type = b.type; f.frequency.value = b.freq; f.Q.value = b.q; f.gain.value = this.pending[i];
+      f.type = b.type; f.frequency.value = b.freq; f.Q.value = b.q; f.gain.value = this.byp.eq[i] ? 0 : this.pending[i];
       return f;
     });
     this.input = stereo(ctx.createGain());    // mono sources are upmixed to both channels
@@ -102,7 +104,16 @@ export class AudioEngine {
     this.pending[i] = db;
     if (!this.filters) return;
     // short ramp avoids zipper noise while still tracking the finger in real time
-    this.filters[i].gain.setTargetAtTime(db, this.ctx.currentTime, 0.015);
+    this.filters[i].gain.setTargetAtTime(this.byp.eq[i] ? 0 : db, this.ctx.currentTime, 0.015);
+  }
+
+  // Bypass switch for one stage: 'eq0'|'eq1'|'eq2' (the three bands, fader position is kept), 'sat', 'width', 'comp', 'lim'.
+  setBypass(name, off) {
+    if (name.startsWith('eq')) {
+      const i = +name.slice(2); this.byp.eq[i] = off;
+      if (this.filters) this.filters[i].gain.setTargetAtTime(off ? 0 : this.pending[i], this.ctx.currentTime, 0.015);
+    } else this.byp[name] = off;
+    if (this.ctx) this._applyMaster(false);
   }
 
   // Apply a mastering preset (from eq.js) to everything after the EQ. Pass null for transparent defaults.
@@ -121,12 +132,13 @@ export class AudioEngine {
       set(node.ratio, clamp(d.ratio, 1, 20)); set(node.attack, clamp(d.attack, 0, 1)); set(node.release, clamp(d.release, 0, 1));
     };
     const meterOnly = !!p.analyzeOnly;
-    dyn(this.comp, p.comp); dyn(this.limiter, p.limiter);
-    set(this.makeup.gain, meterOnly ? 1 : (p.comp.makeup ?? 1));
+    const B = this.byp;
+    dyn(this.comp, B.comp ? NEUTRAL_DYN : p.comp); dyn(this.limiter, B.lim ? NEUTRAL_DYN : p.limiter);
+    set(this.makeup.gain, (meterOnly || B.comp) ? 1 : (p.comp.makeup ?? 1));
     // `saturation` is an amount: parallel wet mix = 5x amount (0.06 -> 30% wet)
-    const wet = meterOnly ? 0 : clamp(p.saturation * 5, 0, 1);
+    const wet = (meterOnly || B.sat) ? 0 : clamp(p.saturation * 5, 0, 1);
     set(this.wet.gain, wet); set(this.dry.gain, 1 - wet);
-    set(this.sideSum.gain, meterOnly ? 1 : p.spread);
+    set(this.sideSum.gain, (meterOnly || B.width) ? 1 : p.spread);
     set(this.master.gain, p.masterGain);
   }
 

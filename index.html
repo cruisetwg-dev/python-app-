@@ -61,7 +61,7 @@
 </div>
 <div id="readout"></div>
 <div id="meter"></div>
-<div id="hint">Drag a fader to shape that band live · drag the background to orbit · pinch or scroll to zoom · double-tap a fader to reset it</div>
+<div id="hint">Drag a fader to shape that band live · drag the background to orbit · pinch or scroll to zoom · double-tap a fader to reset it · flick a switch on the bridge to bypass that stage</div>
 
 <script type="importmap">{"imports":{"three":"./vendor/three.module.js"}}</script>
 <script type="module">
@@ -168,14 +168,14 @@ wall.position.set(0, 2.2, -4.3); wall.receiveShadow = true; scene.add(wall);
 // Backdrop mural: the CRUISEMIXEDIT "Era of the Engineer" artwork, hands over the face. Black falls away into the wall.
 // It plays the EQ back as light: left hand glows copper with the lows, the name flares brass with the mids,
 // the right hand goes steel-blue with the highs. Brass glints twinkle on the fingers like rings catching a light.
-const HANDS_SRC = './assets/cruisemixedit-hands-spray.png';
+const HANDS_SRC = './assets/cruisemixedit-hands.png';
 const MURAL = { w: 7, h: 7 * 1009 / 1024, y: 3.0, z: -4.28 };
 const mural = (() => {
   const tex = new THREE.TextureLoader().load(HANDS_SRC, () => seedGlints(tex.image)); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
   const col = h => { const c = new THREE.Color(h); return new THREE.Vector3(c.r, c.g, c.b); };
   const mat = new THREE.ShaderMaterial({
     transparent:true, depthWrite:false,
-    uniforms:{ map:{ value:tex }, uBase:{ value:0.62 }, uLow:{ value:0 }, uMid:{ value:0 }, uHigh:{ value:0 },
+    uniforms:{ map:{ value:tex }, uBase:{ value:0.42 }, uLow:{ value:0 }, uMid:{ value:0 }, uHigh:{ value:0 },
                cIvory:{ value:new THREE.Vector3(0.914, 0.902, 0.875) }, cCopper:{ value:new THREE.Vector3(0.95, 0.46, 0.27) },
                cBrass:{ value:new THREE.Vector3(1.0, 0.80, 0.42) }, cSteel:{ value:new THREE.Vector3(0.52, 0.80, 0.98) } },
     vertexShader:'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
@@ -206,7 +206,7 @@ function seedGlints(img) {
   const starTex = new THREE.CanvasTexture(sc);
   for (let t = 0, n = 0; t < 20000 && n < 14; t++) {
     const px = Math.random() * c.width | 0, py = (c.height * (0.08 + Math.random() * 0.55)) | 0;   // upper two-thirds: fingers and knuckles
-    if (d[(py * c.width + px) * 4 + 3] > 120) {
+    if (d[(py * c.width + px) * 4 + 3] > 190) {
       const s = new THREE.Sprite(new THREE.SpriteMaterial({ map:starTex, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false, opacity:0 }));
       s.position.set((px / c.width - 0.5) * MURAL.w * 1.15, MURAL.y + (0.5 - py / c.height) * MURAL.h * 1.15, MURAL.z + 0.05);
       s.scale.setScalar(0.14 + Math.random() * 0.16); s.userData.phase = Math.random() * 6.283; s.userData.rate = 0.8 + Math.random() * 1.6;
@@ -316,7 +316,7 @@ const chain = (() => {
     { id:'SAT', sub:'DRIVE', color:'#e0a55a' }, { id:'WIDTH', sub:'MID/SIDE', color:'#9fc0d4' },
     { id:'COMP', sub:'DYNAMICS', color:INK }, { id:'LIM', sub:'CEILING', color:'#cf7f5c' }, { id:'OUT', sub:'MASTER', color:'#d2ad6a' },
   ];
-  const N = STAGES.length, X = i => (i - (N - 1) / 2) * 1.3, ROW_Y = 0.12;
+  const N = STAGES.length, X = i => (i - (N - 1) / 2) * 1.3, ROW_Y = 0.08;
   const g = new THREE.Group(); g.position.set(0, DESK_Y + 0.2, 2.06); g.rotation.x = -0.96; scene.add(g);   // low at the front, rising toward the faders
   const metal = (c, m, r, e = 1) => new THREE.MeshStandardMaterial({ color:c, metalness:m, roughness:r, envMapIntensity:e });
   const panel = new THREE.Mesh(roundedBox(11.9, 0.7, 0.14, 0.05, 0.02), metal(0x23252a, 0.8, 0.38, 0.8)); panel.castShadow = panel.receiveShadow = true; g.add(panel);
@@ -326,29 +326,45 @@ const chain = (() => {
   const hg = hx.createRadialGradient(32, 32, 0, 32, 32, 32); hg.addColorStop(0, 'rgba(255,255,255,1)'); hg.addColorStop(0.35, 'rgba(255,255,255,0.35)'); hg.addColorStop(1, 'rgba(255,255,255,0)');
   hx.fillStyle = hg; hx.fillRect(0, 0, 64, 64); const haloTex = new THREE.CanvasTexture(hc);
 
+  const SW = STAGES.map((_, k) => k > 0 && k < N - 1);          // switchable: every stage between IN and OUT
+  const on = STAGES.map(() => true), levers = [], levVel = [], hits = [];
+  const chrome = metal(0xdfe2e6, 1, 0.16, 1.5), steel = metal(0x8f949c, 0.88, 0.42, 0.9), dark = metal(0x0d0e10, 0.5, 0.5);
   const nodes = STAGES.map((st, k) => {
     const col = new THREE.Color(st.color);
-    const housing = new THREE.Mesh(roundedBox(0.5, 0.3, 0.12, 0.04, 0.02), metal(0x8f949c, 0.88, 0.42, 0.9)); housing.position.set(X(k), ROW_Y, 0.13); housing.castShadow = true; g.add(housing);
-    const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.03, 24).rotateX(Math.PI / 2), new THREE.MeshStandardMaterial({ color:0x141517, emissive:col, emissiveIntensity:0.05, roughness:0.3 }));
-    lens.position.set(X(k), ROW_Y, 0.205); g.add(lens);
-    const halo = new THREE.Mesh(new THREE.PlaneGeometry(0.95, 0.95), new THREE.MeshBasicMaterial({ map:haloTex, color:col, transparent:true, opacity:0, blending:THREE.AdditiveBlending, depthWrite:false }));
-    halo.position.set(X(k), ROW_Y, 0.24); g.add(halo);
+    // lamp above the stage: dark until the stage is touched or working
+    const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.034, 0.034, 0.03, 20).rotateX(Math.PI / 2), new THREE.MeshStandardMaterial({ color:0x141517, emissive:col, emissiveIntensity:0.05, roughness:0.3 }));
+    lens.position.set(X(k), 0.285, 0.09); g.add(lens);
+    const bezel = new THREE.Mesh(new THREE.TorusGeometry(0.044, 0.011, 10, 24), chrome); bezel.position.set(X(k), 0.285, 0.085); g.add(bezel);
+    const halo = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 0.6), new THREE.MeshBasicMaterial({ map:haloTex, color:col, transparent:true, opacity:0, blending:THREE.AdditiveBlending, depthWrite:false }));
+    halo.position.set(X(k), 0.285, 0.13); g.add(halo);
+    if (SW[k]) {                                   // chrome bat-handle toggle on a hex nut. Up = in the chain, down = bypassed
+      const nut = new THREE.Mesh(new THREE.CylinderGeometry(0.115, 0.115, 0.05, 6).rotateX(Math.PI / 2), steel); nut.position.set(X(k), ROW_Y, 0.095); nut.castShadow = true; g.add(nut);
+      const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.085, 0.045, 24).rotateX(Math.PI / 2), chrome); collar.position.set(X(k), ROW_Y, 0.14); g.add(collar);
+      const lever = new THREE.Group(); lever.position.set(X(k), ROW_Y, 0.165); g.add(lever);
+      const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.034, 0.3, 16).rotateX(Math.PI / 2), chrome); stem.position.z = 0.15; stem.castShadow = true; lever.add(stem);
+      const ball = new THREE.Mesh(new THREE.SphereGeometry(0.052, 20, 14), chrome); ball.position.z = 0.31; ball.castShadow = true; lever.add(ball);
+      lever.rotation.x = -0.6; levers[k] = lever; levVel[k] = 0;
+      const hit = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.62, 0.7), new THREE.MeshBasicMaterial({ visible:false })); hit.position.set(X(k), ROW_Y, 0.25); hit.userData.sw = k; g.add(hit); hits.push(hit);
+    } else {                                       // IN and OUT are sockets
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.026, 12, 28), steel); ring.position.set(X(k), ROW_Y, 0.1); g.add(ring);
+      const hole = new THREE.Mesh(new THREE.CircleGeometry(0.085, 28), dark); hole.position.set(X(k), ROW_Y, 0.082); g.add(hole);
+    }
     const e = engraving(256, 80, (x, w) => {
       x.textAlign = 'center'; x.textBaseline = 'alphabetic';
       x.fillStyle = st.color === INK ? '#cfcbc2' : st.color; x.font = `600 40px ${LABEL_FONT}`; try { x.letterSpacing = '4px'; } catch {} x.fillText(st.id, w / 2 + 2, 35);
       x.fillStyle = MUTED; x.font = `500 26px ${MONO_FONT}`; try { x.letterSpacing = '0px'; } catch {} x.fillText(st.sub, w / 2, 69);
     });
     const label = new THREE.Mesh(new THREE.PlaneGeometry(1.25, 1.25 * 80 / 256), new THREE.MeshBasicMaterial({ map:e.tex, transparent:true, depthWrite:false }));
-    label.position.set(X(k), -0.19, 0.078); g.add(label);
+    label.position.set(X(k), -0.2, 0.078); g.add(label);
     return { lens, halo };
   });
   const tubes = STAGES.slice(0, -1).map((st, k) => {
-    const col = new THREE.Color(st.color), len = 1.3 - 0.5, cx = (X(k) + X(k + 1)) / 2;
+    const col = new THREE.Color(st.color), len = 1.3 - 0.24, cx = (X(k) + X(k + 1)) / 2;
     const shell = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, len, 16).rotateZ(Math.PI / 2),
       new THREE.MeshStandardMaterial({ color:0xaec4d0, transparent:true, opacity:0.24, roughness:0.08, metalness:0, envMapIntensity:2, emissive:col, emissiveIntensity:0, depthWrite:false }));
-    shell.position.set(cx, ROW_Y, 0.13); g.add(shell);
+    shell.position.set(cx, ROW_Y, 0.1); g.add(shell);
     const core = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, len, 8).rotateZ(Math.PI / 2), new THREE.MeshBasicMaterial({ color:col, transparent:true, opacity:0, blending:THREE.AdditiveBlending, depthWrite:false }));
-    core.position.set(cx, ROW_Y, 0.13); g.add(core);
+    core.position.set(cx, ROW_Y, 0.1); g.add(core);
     return { shell, core };
   });
 
@@ -360,6 +376,14 @@ const chain = (() => {
     touch(i) { act[1 + i] = 1; if (T - lastTouch > 0.28) { api.pulse(1 + i, 0.7); lastTouch = T; } },   // a change travels downstream from the stage you touched
     engage() { api.pulse(0, 1); [4, 5, 6, 7].forEach(k => { act[k] = Math.max(act[k], 0.7); }); },       // preset or reset: the whole chain wakes up in order
     start() { act[0] = 1; api.pulse(0, 0.8); },
+    hits,
+    toggle(k) {                                    // a switch flips a real bypass in the audio chain
+      if (!SW[k]) return;
+      on[k] = !on[k];
+      audio.setBypass(k <= 3 ? 'eq' + (k - 1) : ['sat', 'width', 'comp', 'lim'][k - 4], !on[k]);
+      if (on[k]) { act[k] = 1; api.pulse(k, 0.6); }
+    },
+    reset() { for (let k = 0; k < N; k++) if (SW[k] && !on[k]) api.toggle(k); api.engage(); },
     update(dt, t, playing, peak) {
       T = t;
       const base = new Array(N).fill(0);
@@ -372,12 +396,14 @@ const chain = (() => {
       const pn = new Array(N).fill(0), pt = new Array(N - 1).fill(0);
       for (let i = pulses.length - 1; i >= 0; i--) {
         const q = pulses[i]; q.p += dt * 6; q.s *= Math.exp(-dt * 0.25);
+        const kk = Math.round(q.p); if (kk !== q.k) { q.k = kk; if (SW[kk] && !on[kk]) q.s *= 0.35; }   // a bypassed stage lets only a faint trace through
         if (q.p > N + 0.5) { pulses.splice(i, 1); continue; }
         for (let k = 0; k < N; k++) { const d = Math.abs(k - q.p); if (d < 1) pn[k] = Math.max(pn[k], (1 - d) * q.s); }
         for (let k = 0; k < N - 1; k++) { const d = Math.abs(k + 0.5 - q.p); if (d < 1) pt[k] = Math.max(pt[k], (1 - d) * q.s); }
       }
-      const ng = base.map((b, k) => Math.max(act[k], b, pn[k]));
+      const ng = base.map((b, k) => (SW[k] && !on[k]) ? 0 : Math.max(act[k], b, pn[k]));
       nodes.forEach((n, k) => { n.lens.material.emissiveIntensity = 0.05 + 2.4 * ng[k]; n.halo.material.opacity = Math.min(1, ng[k]) * 0.6; act[k] *= Math.exp(-dt / 0.7); });
+      levers.forEach((lv, k) => { if (!lv) return; levVel[k] += ((on[k] ? -0.6 : 0.6) - lv.rotation.x) * 320 * dt; levVel[k] *= Math.exp(-dt * 22); lv.rotation.x += levVel[k] * dt; });   // spring-loaded throw
       tubes.forEach((tb, k) => { const v = Math.max(ng[k], ng[k + 1]) * 0.8; const w = Math.max(v, pt[k]); tb.core.material.opacity = Math.min(1, w) * 0.95; tb.shell.material.emissiveIntensity = Math.min(1, w) * 1.4; });
     },
   };
@@ -430,7 +456,13 @@ let lastTap = { t:0, i:-1 };
 el.addEventListener('pointerdown', e => {
   el.setPointerCapture(e.pointerId);
   setNdc(e); ray.setFromCamera(ndc, camera);
-  const hits = ray.intersectObjects(pickables, false);
+  const hits = ray.intersectObjects([...pickables, ...chain.hits], false);
+  if (hits.length && hits[0].object.userData.sw !== undefined) {              // a toggle switch on the bridge
+    chain.toggle(hits[0].object.userData.sw);
+    active.set(e.pointerId, { kind:'switch' });
+    audio.resume();
+    return;
+  }
   if (hits.length) {
     const i = hits[0].object.userData.index;
     const now = performance.now();
@@ -447,7 +479,7 @@ el.addEventListener('pointerdown', e => {
   }
 });
 el.addEventListener('pointermove', e => {
-  const a = active.get(e.pointerId); if (!a) return;
+  const a = active.get(e.pointerId); if (!a || a.kind === 'switch') return;
   if (a.kind === 'fader') {
     const db = pointerToDb(e, faders[a.i]);
     if (db != null) setFader(a.i, yToDb(((db + a.offset) / RANGE) * (TRACK_H / 2)));
@@ -506,7 +538,7 @@ presetSel.onchange = () => {
 };
 document.getElementById('reset').onclick = () => {
   faders.forEach((_, i) => setFader(i, 0));
-  currentPreset = null; presetSel.value = ''; audio.applyMaster(null); chain.engage();
+  currentPreset = null; presetSel.value = ''; audio.applyMaster(null); chain.reset();
 };
 
 // meter readout: approximate momentary loudness + sample peak vs. the preset's targets

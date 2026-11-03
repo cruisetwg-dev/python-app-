@@ -151,6 +151,64 @@ for (let i = 0; i < NBARS; i++) {
   scene.add(b); bars.push(b);
 }
 
+// backdrop: a concrete wall with one spray-painted ghost, brass halo and drips. It breathes with the bass.
+const wallTex = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const x = c.getContext('2d'); x.fillStyle = '#808080'; x.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 9000; i++) { const v = 90 + Math.random() * 90; x.fillStyle = `rgba(${v},${v},${v},0.35)`; x.fillRect(Math.random() * 256, Math.random() * 256, 1 + Math.random() * 2, 1 + Math.random() * 2); }
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(4, 2.5); return t;
+})();
+const wall = new THREE.Mesh(new THREE.PlaneGeometry(16, 9), new THREE.MeshStandardMaterial({ color:0x1b1c21, roughness:0.95, bumpMap:wallTex, bumpScale:0.8 }));
+wall.position.set(0, 2.2, -4.3); wall.receiveShadow = true; scene.add(wall);
+
+const graffiti = (() => {
+  const W = 1792, H = 1024, IVORY = '#e9e6df', BRASS = '#d2ad6a';
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const x = c.getContext('2d');
+  // spray: three soft passes (haze, glow, core), each drawn twice with a shaky hand, then overspray speckle near the line
+  const spray = (path, color, lw, speckle = 700) => {
+    for (const [mult, a, blur] of [[3.4, 0.10, 34], [1.9, 0.22, 14], [1, 0.85, 4]]) {
+      for (let j = 0; j < 2; j++) {
+        x.save(); x.translate((Math.random() - 0.5) * 2.2, (Math.random() - 0.5) * 2.2);
+        x.lineWidth = lw * mult * (j ? 0.8 : 1); x.globalAlpha = a * (j ? 0.6 : 1);
+        x.shadowBlur = blur; x.shadowColor = color; x.strokeStyle = color; x.lineCap = x.lineJoin = 'round';
+        x.stroke(path); x.restore();
+      }
+    }
+    x.save(); x.lineWidth = 30; let n = 0;
+    for (let t = 0; t < 16000 && n < speckle; t++) {
+      const px = 480 + Math.random() * 840, py = 20 + Math.random() * 990;
+      if (x.isPointInStroke(path, px, py)) { x.fillStyle = color; x.globalAlpha = 0.12 + Math.random() * 0.3; x.beginPath(); x.arc(px, py, 0.6 + Math.random() * 1.6, 0, 7); x.fill(); n++; }
+    }
+    x.restore();
+  };
+  const cx = 896, w = 250, top = 120, bottom = 760;
+  const body = new Path2D(); body.moveTo(cx - w, bottom); body.lineTo(cx - w, top + w); body.arc(cx, top + w, w, Math.PI, 0); body.lineTo(cx + w, bottom);
+  const sc = (2 * w) / 5;
+  for (let k = 0; k < 5; k++) { const x0 = cx + w - k * sc; body.quadraticCurveTo(x0 - sc / 2, bottom + (k % 2 ? -70 : 70), x0 - sc, bottom); }
+  const oval = (ex, ey, rx, ry, rot) => { const p = new Path2D(); p.ellipse(ex, ey, rx, ry, rot, 0, Math.PI * 2); return p; };
+  spray(body, IVORY, 5);
+  spray(oval(cx - 92, top + w - 10, 36, 56, -0.12), IVORY, 4, 200);
+  spray(oval(cx + 92, top + w - 10, 36, 56, 0.12), IVORY, 4, 200);
+  spray(oval(cx, top + w + 120, 26, 44, 0), IVORY, 4, 160);
+  spray(oval(cx, top - 52, 130, 24, 0), BRASS, 5, 300);                      // halo
+  const star = (sx, sy, r) => { const p = new Path2D(); p.moveTo(sx, sy - r); p.quadraticCurveTo(sx, sy, sx + r, sy); p.quadraticCurveTo(sx, sy, sx, sy + r); p.quadraticCurveTo(sx, sy, sx - r, sy); p.quadraticCurveTo(sx, sy, sx, sy - r); return p; };
+  [[cx - 380, top + 60, 26], [cx + 400, top + 200, 18], [cx - 470, top + 420, 14], [cx + 340, top + 520, 22], [cx + 130, top - 150, 12]]
+    .forEach(([sx, sy, r]) => spray(star(sx, sy, r), BRASS, 2.5, 60));
+  const drip = (dx, y0, len, lw) => {                                       // a run of paint with a bead at the end
+    const p = new Path2D(); p.moveTo(dx, y0); p.lineTo(dx, y0 + len); spray(p, IVORY, lw, 80);
+    x.save(); x.fillStyle = IVORY; x.shadowColor = IVORY; x.shadowBlur = 10; x.globalAlpha = 0.9;
+    x.beginPath(); x.arc(dx, y0 + len, lw * 1.35, 0, 7); x.fill(); x.restore();
+  };
+  drip(cx - 92, top + w + 46, 150, 3.5); drip(cx + 92, top + w + 46, 90, 3);   // from the eyes
+  drip(cx, top + w + 164, 55, 3);                                              // from the mouth
+  drip(cx + 200, bottom + 30, 150, 4); drip(cx, bottom + 30, 200, 4.5); drip(cx - 200, bottom + 30, 110, 4);
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(14, 8), new THREE.MeshBasicMaterial({ map:tex, transparent:true, opacity:0.55, depthWrite:false, toneMapped:false }));
+  m.scale.setScalar(0.6); m.position.set(0, 3.3, -4.28); scene.add(m); return m;   // looms above the faders, clear of the readouts
+})();
+let bass = 0;
+
 // canvas-drawn engravings (redrawn once the web fonts arrive)
 const redraws = [];
 function engraving(w, h, draw, mat) {
@@ -262,7 +320,7 @@ const ray = new THREE.Raycaster();
 const ndc = new THREE.Vector2();
 const active = new Map();     // pointerId -> {kind:'fader'|'orbit', ...}
 const el = renderer.domElement;
-const orbit = { theta:0, phi:0.3, dist:11, target:new THREE.Vector3(0, -0.2, 0) };
+const orbit = { theta:0, phi:0.3, dist:12.5, target:new THREE.Vector3(0, 0.5, 0) };
 const pinch = { d:0 };
 const pickables = faders.flatMap(f => { const m = []; f.handle.traverse(o => { if (o.isMesh) m.push(o); }); return m; });
 
@@ -383,7 +441,7 @@ function resize() {
   camera.updateProjectionMatrix();
 }
 addEventListener('resize', resize); resize();
-orbit.dist = innerWidth < innerHeight ? 15 : 11;
+orbit.dist = innerWidth < innerHeight ? 17 : 12.5;
 
 const spec = new Uint8Array(1024);
 function frame(now) {
@@ -402,6 +460,9 @@ function frame(now) {
     bars[i].scale.y += (h - bars[i].scale.y) * 0.4;
     bars[i].position.y = DESK_Y + bars[i].scale.y / 2;
   }
+  let b = 0; if (n) { for (let i = 0; i < 6; i++) b += spec[i]; b /= 6 * 255; }
+  bass += (b - bass) * 0.25;
+  graffiti.material.opacity = 0.55 + 0.45 * Math.min(1, bass * 1.6);       // the ghost brightens on the low end
   renderer.render(scene, camera);
 }
 requestAnimationFrame(frame);

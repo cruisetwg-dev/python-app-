@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>3D Touch EQ</title>
+<title>Cruise Mixed</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Jost:wght@400;500;600&display=swap">
 <style>
   /* Tactile elegance: machined graphite desk, aluminum caps, brass and copper indicators, warm key light. */
@@ -18,7 +18,9 @@
   canvas { display:block; touch-action:none; }
   #bar { position:fixed; left:0; right:0; top:0; display:flex; flex-wrap:wrap; gap:8px; align-items:center;
     padding:12px 16px; z-index:2; background:linear-gradient(#121316f2, #12131600); }
-  #bar h1 { font-size:12px; font-weight:500; margin:0 10px 0 0; letter-spacing:.28em; text-transform:uppercase; color:var(--muted); }
+  #bar h1 { display:flex; align-items:center; gap:10px; font-size:12px; font-weight:500; margin:0 10px 0 0; letter-spacing:.28em; text-transform:uppercase; color:var(--ink); }
+  .badge { width:34px; height:34px; border-radius:50%; background:#000; border:1px solid var(--edge); box-shadow:0 0 12px #d2ad6a22; display:grid; place-items:center; flex:none; }
+  .badge img { width:76%; height:76%; display:block; }
   button, label.btn, select {
     font:500 12px var(--label); letter-spacing:.1em; text-transform:uppercase; color:var(--ink);
     padding:9px 15px; border-radius:10px; border:1px solid var(--edge); cursor:pointer;
@@ -40,7 +42,7 @@
 </head>
 <body>
 <div id="bar">
-  <h1>3D Touch EQ</h1>
+  <h1><span class="badge"><img src="./assets/cm-logo.png" alt=""></span>Cruise Mixed</h1>
   <button id="play">▶ Start</button>
   <select id="source" aria-label="Audio source">
     <option value="synth">Demo loop</option>
@@ -161,12 +163,17 @@ const wallTex = (() => {
 const wall = new THREE.Mesh(new THREE.PlaneGeometry(16, 9), new THREE.MeshStandardMaterial({ color:0x1b1c21, roughness:0.95, bumpMap:wallTex, bumpScale:0.8 }));
 wall.position.set(0, 2.2, -4.3); wall.receiveShadow = true; scene.add(wall);
 
+const LOGO_SRC = './assets/cm-logo.png';        // ivory brush strokes of the "Cm" monogram on a transparent background
 const graffiti = (() => {
   const W = 1792, H = 1024, IVORY = '#e9e6df', BRASS = '#d2ad6a';
   const c = document.createElement('canvas'); c.width = W; c.height = H;
   const x = c.getContext('2d');
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(14, 8), new THREE.MeshBasicMaterial({ map:tex, transparent:true, opacity:0.55, depthWrite:false, toneMapped:false }));
+  m.scale.setScalar(0.45); m.position.set(0, 3.35, -4.28); scene.add(m);   // hangs above the faders, clear of the readouts
+
   // spray: three soft passes (haze, glow, core), each drawn twice with a shaky hand, then overspray speckle near the line
-  const spray = (path, color, lw, speckle = 700) => {
+  const spray = (path, color, lw, speckle = 500) => {
     for (const [mult, a, blur] of [[3.4, 0.10, 34], [1.9, 0.22, 14], [1, 0.85, 4]]) {
       for (let j = 0; j < 2; j++) {
         x.save(); x.translate((Math.random() - 0.5) * 2.2, (Math.random() - 0.5) * 2.2);
@@ -182,30 +189,44 @@ const graffiti = (() => {
     }
     x.restore();
   };
-  const cx = 896, w = 250, top = 120, bottom = 760;
-  const body = new Path2D(); body.moveTo(cx - w, bottom); body.lineTo(cx - w, top + w); body.arc(cx, top + w, w, Math.PI, 0); body.lineTo(cx + w, bottom);
-  const sc = (2 * w) / 5;
-  for (let k = 0; k < 5; k++) { const x0 = cx + w - k * sc; body.quadraticCurveTo(x0 - sc / 2, bottom + (k % 2 ? -70 : 70), x0 - sc, bottom); }
-  const oval = (ex, ey, rx, ry, rot) => { const p = new Path2D(); p.ellipse(ex, ey, rx, ry, rot, 0, Math.PI * 2); return p; };
-  spray(body, IVORY, 5);
-  spray(oval(cx - 92, top + w - 10, 36, 56, -0.12), IVORY, 4, 200);
-  spray(oval(cx + 92, top + w - 10, 36, 56, 0.12), IVORY, 4, 200);
-  spray(oval(cx, top + w + 120, 26, 44, 0), IVORY, 4, 160);
-  spray(oval(cx, top - 52, 130, 24, 0), BRASS, 5, 300);                      // halo
-  const star = (sx, sy, r) => { const p = new Path2D(); p.moveTo(sx, sy - r); p.quadraticCurveTo(sx, sy, sx + r, sy); p.quadraticCurveTo(sx, sy, sx, sy + r); p.quadraticCurveTo(sx, sy, sx - r, sy); p.quadraticCurveTo(sx, sy, sx, sy - r); return p; };
-  [[cx - 380, top + 60, 26], [cx + 400, top + 200, 18], [cx - 470, top + 420, 14], [cx + 340, top + 520, 22], [cx + 130, top - 150, 12]]
-    .forEach(([sx, sy, r]) => spray(star(sx, sy, r), BRASS, 2.5, 60));
   const drip = (dx, y0, len, lw) => {                                       // a run of paint with a bead at the end
-    const p = new Path2D(); p.moveTo(dx, y0); p.lineTo(dx, y0 + len); spray(p, IVORY, lw, 80);
+    const p = new Path2D(); p.moveTo(dx, y0); p.lineTo(dx, y0 + len); spray(p, IVORY, lw, 60);
     x.save(); x.fillStyle = IVORY; x.shadowColor = IVORY; x.shadowBlur = 10; x.globalAlpha = 0.9;
     x.beginPath(); x.arc(dx, y0 + len, lw * 1.35, 0, 7); x.fill(); x.restore();
   };
-  drip(cx - 92, top + w + 46, 150, 3.5); drip(cx + 92, top + w + 46, 90, 3);   // from the eyes
-  drip(cx, top + w + 164, 55, 3);                                              // from the mouth
-  drip(cx + 200, bottom + 30, 150, 4); drip(cx, bottom + 30, 200, 4.5); drip(cx - 200, bottom + 30, 110, 4);
-  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
-  const m = new THREE.Mesh(new THREE.PlaneGeometry(14, 8), new THREE.MeshBasicMaterial({ map:tex, transparent:true, opacity:0.55, depthWrite:false, toneMapped:false }));
-  m.scale.setScalar(0.6); m.position.set(0, 3.3, -4.28); scene.add(m); return m;   // looms above the faders, clear of the readouts
+  const star = (sx, sy, r) => { const p = new Path2D(); p.moveTo(sx, sy - r); p.quadraticCurveTo(sx, sy, sx + r, sy); p.quadraticCurveTo(sx, sy, sx, sy + r); p.quadraticCurveTo(sx, sy, sx - r, sy); p.quadraticCurveTo(sx, sy, sx, sy - r); return p; };
+
+  const img = new Image();
+  img.onload = () => {
+    const R = 330, cx = 896, cy = 400, D = 2 * R, ox = cx - R, oy = cy - R;
+    // the monogram: glow passes in brass, then the crisp ivory core, hand-shaken
+    const paint = (blur, color, alpha, jx, jy) => { x.save(); x.shadowColor = color; x.shadowBlur = blur; x.globalAlpha = alpha; x.drawImage(img, ox + jx, oy + jy, D, D); x.restore(); };
+    paint(44, BRASS, 0.40, 0, 0); paint(18, BRASS, 0.65, 0, 0); paint(2, IVORY, 0.60, 1.4, -1); paint(2, IVORY, 0.95, -0.8, 0.8);
+    // overspray: specks where the paint would drift off the strokes
+    const oc = document.createElement('canvas'); oc.width = oc.height = D; const ox2 = oc.getContext('2d'); ox2.drawImage(img, 0, 0, D, D);
+    const a = ox2.getImageData(0, 0, D, D).data, A = (px, py) => (px < 0 || py < 0 || px >= D || py >= D) ? 0 : a[(py * D + px) * 4 + 3];
+    x.save(); x.fillStyle = IVORY;
+    for (let t = 0, n = 0; t < 40000 && n < 900; t++) {
+      const px = Math.random() * D | 0, py = Math.random() * D | 0;
+      const ang = Math.random() * 6.283, d = 6 + Math.random() * 18;
+      if (A(px, py) < 30 && A(px + Math.cos(ang) * d | 0, py + Math.sin(ang) * d | 0) > 150) {
+        x.globalAlpha = 0.15 + Math.random() * 0.35; x.beginPath(); x.arc(ox + px, oy + py, 0.6 + Math.random() * 1.6, 0, 7); x.fill(); n++;
+      }
+    }
+    x.restore();
+    // brass ring around it
+    const ring = new Path2D(); ring.arc(cx, cy, R + 8, 0, Math.PI * 2); spray(ring, BRASS, 4.5, 700);
+    // drips: off the ring and off the feet of the "m"
+    drip(cx - 230, cy + Math.sqrt((R + 8) ** 2 - 230 ** 2) - 2, 120, 4); drip(cx + 240, cy + Math.sqrt((R + 8) ** 2 - 240 ** 2) - 2, 80, 3.5);
+    const lowest = fx => { for (let py = D - 1; py >= 0; py--) for (let dx = -6; dx <= 6; dx++) if (A((fx * D | 0) + dx, py) > 128) return py; return D * 0.8; };
+    drip(ox + D * 0.71, oy + lowest(0.71) - 2, 60, 3.5); drip(ox + D * 0.5, oy + lowest(0.5) - 2, 45, 3);
+    // stars
+    [[cx - 460, cy - 150, 22], [cx + 470, cy - 60, 16], [cx - 420, cy + 190, 12], [cx + 400, cy + 230, 20], [cx + 60, cy - 390, 12]]
+      .forEach(([sx, sy, r]) => spray(star(sx, sy, r), BRASS, 2.5, 60));
+    tex.needsUpdate = true;
+  };
+  img.src = LOGO_SRC;
+  return m;
 })();
 let bass = 0;
 

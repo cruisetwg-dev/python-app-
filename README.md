@@ -1,4 +1,4 @@
-# 3D Touch EQ
+# Cruise Mixed
 
 A touch-friendly 3D mixer: three faders (Low / Mid / High) each control one band of a
 real-time 3-band EQ built from Web Audio `BiquadFilterNode`s. A 3D spectrum analyser

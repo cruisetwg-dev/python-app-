@@ -175,7 +175,7 @@ const mural = (() => {
   const col = h => { const c = new THREE.Color(h); return new THREE.Vector3(c.r, c.g, c.b); };
   const mat = new THREE.ShaderMaterial({
     transparent:true, depthWrite:false,
-    uniforms:{ map:{ value:tex }, uBase:{ value:0.4 }, uLow:{ value:0 }, uMid:{ value:0 }, uHigh:{ value:0 },
+    uniforms:{ map:{ value:tex }, uBase:{ value:0.62 }, uLow:{ value:0 }, uMid:{ value:0 }, uHigh:{ value:0 },
                cIvory:{ value:new THREE.Vector3(0.914, 0.902, 0.875) }, cCopper:{ value:new THREE.Vector3(0.95, 0.46, 0.27) },
                cBrass:{ value:new THREE.Vector3(1.0, 0.80, 0.42) }, cSteel:{ value:new THREE.Vector3(0.52, 0.80, 0.98) } },
     vertexShader:'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
@@ -206,7 +206,7 @@ function seedGlints(img) {
   const starTex = new THREE.CanvasTexture(sc);
   for (let t = 0, n = 0; t < 20000 && n < 14; t++) {
     const px = Math.random() * c.width | 0, py = (c.height * (0.08 + Math.random() * 0.55)) | 0;   // upper two-thirds: fingers and knuckles
-    if (d[(py * c.width + px) * 4 + 3] > 170) {
+    if (d[(py * c.width + px) * 4 + 3] > 120) {
       const s = new THREE.Sprite(new THREE.SpriteMaterial({ map:starTex, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false, opacity:0 }));
       s.position.set((px / c.width - 0.5) * MURAL.w * 1.15, MURAL.y + (0.5 - py / c.height) * MURAL.h * 1.15, MURAL.z + 0.05);
       s.scale.setScalar(0.14 + Math.random() * 0.16); s.userData.phase = Math.random() * 6.283; s.userData.rate = 0.8 + Math.random() * 1.6;
@@ -215,6 +215,7 @@ function seedGlints(img) {
   }
 }
 const lvl = { low:0, mid:0, high:0 };
+let outPeak = -90, lastT = 0, prevEnergy = 0, lastOnset = 0;
 
 // canvas-drawn engravings (redrawn once the web fonts arrive)
 const redraws = [];
@@ -303,6 +304,86 @@ function drawValue(sprite, db) {
   tex.needsUpdate = true;
 }
 
+// ---------- signal path: the base the plug-in stands on ----------
+// A sloped bridge across the front of the desk, like a console meter bridge. The real chain sits on it in series:
+// IN > LOW > MID > HIGH > SAT > WIDTH > COMP > LIM > OUT, joined by glass tubes. Everything is dark by default.
+// A stage glows when you touch it or when it is actually working (compressor and limiter reduction), and a soft
+// pulse of light runs down the tubes on transients and on every change, so you can see where the signal goes.
+const chain = (() => {
+  const STAGES = [
+    { id:'IN', sub:'SOURCE', color:INK },
+    ...BANDS.map(b => ({ id:b.name, sub:b.freqLabel.toUpperCase(), color:skin(b) })),
+    { id:'SAT', sub:'DRIVE', color:'#e0a55a' }, { id:'WIDTH', sub:'MID/SIDE', color:'#9fc0d4' },
+    { id:'COMP', sub:'DYNAMICS', color:INK }, { id:'LIM', sub:'CEILING', color:'#cf7f5c' }, { id:'OUT', sub:'MASTER', color:'#d2ad6a' },
+  ];
+  const N = STAGES.length, X = i => (i - (N - 1) / 2) * 1.3, ROW_Y = 0.12;
+  const g = new THREE.Group(); g.position.set(0, DESK_Y + 0.2, 2.06); g.rotation.x = -0.96; scene.add(g);   // low at the front, rising toward the faders
+  const metal = (c, m, r, e = 1) => new THREE.MeshStandardMaterial({ color:c, metalness:m, roughness:r, envMapIntensity:e });
+  const panel = new THREE.Mesh(roundedBox(11.9, 0.7, 0.14, 0.05, 0.02), metal(0x23252a, 0.8, 0.38, 0.8)); panel.castShadow = panel.receiveShadow = true; g.add(panel);
+  const groove = new THREE.Mesh(new THREE.BoxGeometry(11.3, 0.26, 0.02), metal(0x08090b, 0.3, 0.8)); groove.position.set(0, ROW_Y, 0.075); g.add(groove);
+
+  const hc = document.createElement('canvas'); hc.width = hc.height = 64; const hx = hc.getContext('2d');
+  const hg = hx.createRadialGradient(32, 32, 0, 32, 32, 32); hg.addColorStop(0, 'rgba(255,255,255,1)'); hg.addColorStop(0.35, 'rgba(255,255,255,0.35)'); hg.addColorStop(1, 'rgba(255,255,255,0)');
+  hx.fillStyle = hg; hx.fillRect(0, 0, 64, 64); const haloTex = new THREE.CanvasTexture(hc);
+
+  const nodes = STAGES.map((st, k) => {
+    const col = new THREE.Color(st.color);
+    const housing = new THREE.Mesh(roundedBox(0.5, 0.3, 0.12, 0.04, 0.02), metal(0x8f949c, 0.88, 0.42, 0.9)); housing.position.set(X(k), ROW_Y, 0.13); housing.castShadow = true; g.add(housing);
+    const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.03, 24).rotateX(Math.PI / 2), new THREE.MeshStandardMaterial({ color:0x141517, emissive:col, emissiveIntensity:0.05, roughness:0.3 }));
+    lens.position.set(X(k), ROW_Y, 0.205); g.add(lens);
+    const halo = new THREE.Mesh(new THREE.PlaneGeometry(0.95, 0.95), new THREE.MeshBasicMaterial({ map:haloTex, color:col, transparent:true, opacity:0, blending:THREE.AdditiveBlending, depthWrite:false }));
+    halo.position.set(X(k), ROW_Y, 0.24); g.add(halo);
+    const e = engraving(256, 80, (x, w) => {
+      x.textAlign = 'center'; x.textBaseline = 'alphabetic';
+      x.fillStyle = st.color === INK ? '#cfcbc2' : st.color; x.font = `600 40px ${LABEL_FONT}`; try { x.letterSpacing = '4px'; } catch {} x.fillText(st.id, w / 2 + 2, 35);
+      x.fillStyle = MUTED; x.font = `500 26px ${MONO_FONT}`; try { x.letterSpacing = '0px'; } catch {} x.fillText(st.sub, w / 2, 69);
+    });
+    const label = new THREE.Mesh(new THREE.PlaneGeometry(1.25, 1.25 * 80 / 256), new THREE.MeshBasicMaterial({ map:e.tex, transparent:true, depthWrite:false }));
+    label.position.set(X(k), -0.19, 0.078); g.add(label);
+    return { lens, halo };
+  });
+  const tubes = STAGES.slice(0, -1).map((st, k) => {
+    const col = new THREE.Color(st.color), len = 1.3 - 0.5, cx = (X(k) + X(k + 1)) / 2;
+    const shell = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, len, 16).rotateZ(Math.PI / 2),
+      new THREE.MeshStandardMaterial({ color:0xaec4d0, transparent:true, opacity:0.24, roughness:0.08, metalness:0, envMapIntensity:2, emissive:col, emissiveIntensity:0, depthWrite:false }));
+    shell.position.set(cx, ROW_Y, 0.13); g.add(shell);
+    const core = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, len, 8).rotateZ(Math.PI / 2), new THREE.MeshBasicMaterial({ color:col, transparent:true, opacity:0, blending:THREE.AdditiveBlending, depthWrite:false }));
+    core.position.set(cx, ROW_Y, 0.13); g.add(core);
+    return { shell, core };
+  });
+
+  const act = new Array(N).fill(0), pulses = [];
+  let T = 0, lastTouch = -9;
+  const rd = v => (typeof v === 'number' ? v : v?.value ?? 0);
+  const api = {
+    pulse(from, s) { pulses.push({ p:from, s }); },
+    touch(i) { act[1 + i] = 1; if (T - lastTouch > 0.28) { api.pulse(1 + i, 0.7); lastTouch = T; } },   // a change travels downstream from the stage you touched
+    engage() { api.pulse(0, 1); [4, 5, 6, 7].forEach(k => { act[k] = Math.max(act[k], 0.7); }); },       // preset or reset: the whole chain wakes up in order
+    start() { act[0] = 1; api.pulse(0, 0.8); },
+    update(dt, t, playing, peak) {
+      T = t;
+      const base = new Array(N).fill(0);
+      faders.forEach((f, i) => { if (Math.abs(f.db) > 0.05) base[1 + i] = Math.min(0.25, 0.05 + Math.abs(f.db) / RANGE * 0.5); });   // an engaged band keeps a faint pilot light
+      base[4] = Math.min(0.3, rd(audio.wet?.gain) * 0.6);
+      base[5] = Math.min(0.3, Math.abs((audio.sideSum ? rd(audio.sideSum.gain) : 1) - 1) * 5);
+      base[6] = Math.min(1, -rd(audio.comp?.reduction) / 12) * 0.9;                                   // lit only while it is really squeezing
+      base[7] = Math.min(1, -rd(audio.limiter?.reduction) / 6) * 0.9;
+      if (playing) { base[0] = 0.06; base[8] = Math.max(0, Math.min(1, (peak + 36) / 36)) * 0.25; }
+      const pn = new Array(N).fill(0), pt = new Array(N - 1).fill(0);
+      for (let i = pulses.length - 1; i >= 0; i--) {
+        const q = pulses[i]; q.p += dt * 6; q.s *= Math.exp(-dt * 0.25);
+        if (q.p > N + 0.5) { pulses.splice(i, 1); continue; }
+        for (let k = 0; k < N; k++) { const d = Math.abs(k - q.p); if (d < 1) pn[k] = Math.max(pn[k], (1 - d) * q.s); }
+        for (let k = 0; k < N - 1; k++) { const d = Math.abs(k + 0.5 - q.p); if (d < 1) pt[k] = Math.max(pt[k], (1 - d) * q.s); }
+      }
+      const ng = base.map((b, k) => Math.max(act[k], b, pn[k]));
+      nodes.forEach((n, k) => { n.lens.material.emissiveIntensity = 0.05 + 2.4 * ng[k]; n.halo.material.opacity = Math.min(1, ng[k]) * 0.6; act[k] *= Math.exp(-dt / 0.7); });
+      tubes.forEach((tb, k) => { const v = Math.max(ng[k], ng[k + 1]) * 0.8; const w = Math.max(v, pt[k]); tb.core.material.opacity = Math.min(1, w) * 0.95; tb.shell.material.emissiveIntensity = Math.min(1, w) * 1.4; });
+    },
+  };
+  return api;
+})();
+
 function setFader(i, db, fromUser = true) {
   const f = faders[i];
   f.db = Math.round(db * 10) / 10;
@@ -311,7 +392,7 @@ function setFader(i, db, fromUser = true) {
   const h = Math.max(Math.abs(y), 0.001);
   f.fill.scale.y = h; f.fill.position.y = y / 2;
   drawValue(f.value, f.db);
-  if (fromUser) audio.setGain(i, f.db);       // real-time: applied immediately to the live filter
+  if (fromUser) { audio.setGain(i, f.db); chain.touch(i); }       // real-time: applied immediately to the live filter
   renderReadout();
 }
 function renderReadout() {
@@ -359,6 +440,7 @@ el.addEventListener('pointerdown', e => {
     const grabDb = pointerToDb(e, f);
     active.set(e.pointerId, { kind:'fader', i, offset: grabDb == null ? 0 : f.db - grabDb });
     f.glow.material.emissiveIntensity = 2.6;
+    chain.touch(i);
     audio.resume();
   } else {
     active.set(e.pointerId, { kind:'orbit', x:e.clientX, y:e.clientY });
@@ -399,7 +481,7 @@ const fileIn = document.getElementById('file');
 async function startSource() {
   try {
     await audio.start(sourceSel.value, fileIn.files[0]);
-    playBtn.textContent = '■ Stop'; playBtn.classList.add('on');
+    playBtn.textContent = '■ Stop'; playBtn.classList.add('on'); chain.start();
   } catch (err) { alert('Could not start audio: ' + err.message); }
 }
 playBtn.onclick = async () => {
@@ -420,11 +502,11 @@ presetSel.onchange = () => {
   if (!presetSel.value) return;
   currentPreset = getPresetById(presetSel.value);
   setFader(0, currentPreset.eq.low); setFader(1, currentPreset.eq.mid); setFader(2, currentPreset.eq.high);
-  audio.applyMaster(currentPreset);
+  audio.applyMaster(currentPreset); chain.engage();
 };
 document.getElementById('reset').onclick = () => {
   faders.forEach((_, i) => setFader(i, 0));
-  currentPreset = null; presetSel.value = ''; audio.applyMaster(null);
+  currentPreset = null; presetSel.value = ''; audio.applyMaster(null); chain.engage();
 };
 
 // meter readout: approximate momentary loudness + sample peak vs. the preset's targets
@@ -432,7 +514,7 @@ const meterEl = document.getElementById('meter');
 let lastMeter = 0;
 function updateMeter(now) {
   if (now - lastMeter < 100) return; lastMeter = now;
-  const m = audio.meter();
+  const m = audio.meter(); outPeak = m ? m.peak : -90;
   if (!m) { meterEl.textContent = ''; return; }
   const fmt = v => (isFinite(v) ? v.toFixed(1).replace('-', '−') : '—');
   const lt = currentPreset?.lufsTarget, pl = currentPreset?.truePeakLimit;
@@ -471,7 +553,11 @@ function frame(now) {
   const follow = (k, v) => { lvl[k] += (v - lvl[k]) * (v > lvl[k] ? 0.45 : 0.08); return lvl[k]; };   // fast attack, slow release
   const U = mural.material.uniforms;
   U.uLow.value = follow('low', band(1, 9)); U.uMid.value = follow('mid', band(20, 60)); U.uHigh.value = follow('high', band(150, 400));
-  const t = now * 0.001;
+  const t = now * 0.001, dt = lastT ? Math.min(0.05, t - lastT) : 0.016; lastT = t;
+  const energy = band(1, 40);                                                   // a sharp rise in level (a kick, a snare) sends a soft pulse down the chain
+  if (n && energy - prevEnergy > 0.14 && t - lastOnset > 0.3) { chain.pulse(0, Math.min(0.8, 0.3 + energy * 0.5)); lastOnset = t; }
+  prevEnergy = energy;
+  chain.update(dt, t, audio.playing, outPeak);
   for (const s of glints) s.material.opacity = Math.max(0, Math.sin(t * s.userData.rate + s.userData.phase)) ** 6 * (0.35 + 0.65 * U.uHigh.value);
   renderer.render(scene, camera);
 }

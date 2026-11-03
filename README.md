@@ -33,3 +33,8 @@ auto-normalise to their LUFS target; the target is shown so you can ride the fad
 
 ## Branding assets
 `assets/cm-logo.png` (the Cm monogram, used as the toolbar badge) and `assets/cruisemixedit-hands.png` (the backdrop mural) are part of the Cruise MixEdit identity.
+
+## Signal-path bridge
+The sloped bridge at the front of the desk shows the real chain: IN, LOW, MID, HIGH, SAT, WIDTH, COMP, LIM, OUT, joined by
+glass tubes. It is dark by default. A stage lights when you touch it or when it is working (compressor/limiter reduction),
+and a soft pulse of light runs down the tubes on transients and on every change or preset.

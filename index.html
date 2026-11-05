@@ -269,7 +269,7 @@ const faders = BANDS.map((band, i) => {
   handle.traverse(o => { if (o.isMesh) o.userData.index = i; });
 
   const label = makeLabel(band.name, band.freqLabel, skin(band));
-  label.position.set(0, DESK_Y + 0.42, 0.95); g.add(label);
+  label.position.set(0, DESK_Y + 0.62, 0.95); g.add(label);
   const value = makeValueSprite(); value.position.set(0, TRACK_H / 2 + 0.55, 0); g.add(value);
 
   return { band, group:g, handle, hit, fill, glow, value, db:0 };
@@ -316,7 +316,7 @@ const chain = (() => {
     { id:'SAT', sub:'DRIVE', color:'#e0a55a' }, { id:'WIDTH', sub:'MID/SIDE', color:'#9fc0d4' },
     { id:'COMP', sub:'DYNAMICS', color:INK }, { id:'LIM', sub:'CEILING', color:'#cf7f5c' }, { id:'OUT', sub:'MASTER', color:'#d2ad6a' },
   ];
-  const N = STAGES.length, X = i => (i - (N - 1) / 2) * 1.3, ROW_Y = 0.08;
+  const N = STAGES.length, X = i => (i - (N - 1) / 2) * 1.3, ROW_Y = 0.1;
   const g = new THREE.Group(); g.position.set(0, DESK_Y + 0.2, 2.06); g.rotation.x = -0.96; scene.add(g);   // low at the front, rising toward the faders
   const metal = (c, m, r, e = 1) => new THREE.MeshStandardMaterial({ color:c, metalness:m, roughness:r, envMapIntensity:e });
   const panel = new THREE.Mesh(roundedBox(11.9, 0.7, 0.14, 0.05, 0.02), metal(0x23252a, 0.8, 0.38, 0.8)); panel.castShadow = panel.receiveShadow = true; g.add(panel);
@@ -333,21 +333,21 @@ const chain = (() => {
     const col = new THREE.Color(st.color);
     // lamp above the stage: dark until the stage is touched or working
     const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.034, 0.034, 0.03, 20).rotateX(Math.PI / 2), new THREE.MeshStandardMaterial({ color:0x141517, emissive:col, emissiveIntensity:0.05, roughness:0.3 }));
-    lens.position.set(X(k), 0.285, 0.09); g.add(lens);
-    const bezel = new THREE.Mesh(new THREE.TorusGeometry(0.044, 0.011, 10, 24), chrome); bezel.position.set(X(k), 0.285, 0.085); g.add(bezel);
+    lens.position.set(X(k), 0.3, 0.09); g.add(lens);
+    const bezel = new THREE.Mesh(new THREE.TorusGeometry(0.044, 0.011, 10, 24), chrome); bezel.position.set(X(k), 0.3, 0.085); g.add(bezel);
     const halo = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 0.6), new THREE.MeshBasicMaterial({ map:haloTex, color:col, transparent:true, opacity:0, blending:THREE.AdditiveBlending, depthWrite:false }));
-    halo.position.set(X(k), 0.285, 0.13); g.add(halo);
+    halo.position.set(X(k), 0.3, 0.13); g.add(halo);
     if (SW[k]) {                                   // chrome bat-handle toggle on a hex nut. Up = in the chain, down = bypassed
-      const nut = new THREE.Mesh(new THREE.CylinderGeometry(0.115, 0.115, 0.05, 6).rotateX(Math.PI / 2), steel); nut.position.set(X(k), ROW_Y, 0.095); nut.castShadow = true; g.add(nut);
-      const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.085, 0.045, 24).rotateX(Math.PI / 2), chrome); collar.position.set(X(k), ROW_Y, 0.14); g.add(collar);
-      const lever = new THREE.Group(); lever.position.set(X(k), ROW_Y, 0.165); g.add(lever);
-      const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.034, 0.3, 16).rotateX(Math.PI / 2), chrome); stem.position.z = 0.15; stem.castShadow = true; lever.add(stem);
-      const ball = new THREE.Mesh(new THREE.SphereGeometry(0.052, 20, 14), chrome); ball.position.z = 0.31; ball.castShadow = true; lever.add(ball);
-      lever.rotation.x = -0.6; levers[k] = lever; levVel[k] = 0;
-      const hit = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.62, 0.7), new THREE.MeshBasicMaterial({ visible:false })); hit.position.set(X(k), ROW_Y, 0.25); hit.userData.sw = k; g.add(hit); hits.push(hit);
+      const nut = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.055, 6).rotateX(Math.PI / 2), steel); nut.position.set(X(k), ROW_Y, 0.097); nut.castShadow = true; g.add(nut);
+      const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.11, 0.05, 24).rotateX(Math.PI / 2), chrome); collar.position.set(X(k), ROW_Y, 0.145); g.add(collar);
+      const lever = new THREE.Group(); lever.position.set(X(k), ROW_Y, 0.175); g.add(lever);
+      const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.045, 0.36, 16).rotateX(Math.PI / 2), chrome); stem.position.z = 0.18; stem.castShadow = true; lever.add(stem);
+      const ball = new THREE.Mesh(new THREE.SphereGeometry(0.07, 24, 16), chrome); ball.position.z = 0.38; ball.castShadow = true; lever.add(ball);
+      lever.rotation.x = -0.5; levers[k] = lever; levVel[k] = 0;
+      const hit = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 0.9), new THREE.MeshBasicMaterial({ visible:false })); hit.position.set(X(k), ROW_Y, 0.3); hit.userData.sw = k; g.add(hit); hits.push(hit);
     } else {                                       // IN and OUT are sockets
-      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.026, 12, 28), steel); ring.position.set(X(k), ROW_Y, 0.1); g.add(ring);
-      const hole = new THREE.Mesh(new THREE.CircleGeometry(0.085, 28), dark); hole.position.set(X(k), ROW_Y, 0.082); g.add(hole);
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.125, 0.032, 12, 28), steel); ring.position.set(X(k), ROW_Y, 0.1); g.add(ring);
+      const hole = new THREE.Mesh(new THREE.CircleGeometry(0.105, 28), dark); hole.position.set(X(k), ROW_Y, 0.082); g.add(hole);
     }
     const e = engraving(256, 80, (x, w) => {
       x.textAlign = 'center'; x.textBaseline = 'alphabetic';
@@ -359,7 +359,7 @@ const chain = (() => {
     return { lens, halo };
   });
   const tubes = STAGES.slice(0, -1).map((st, k) => {
-    const col = new THREE.Color(st.color), len = 1.3 - 0.24, cx = (X(k) + X(k + 1)) / 2;
+    const col = new THREE.Color(st.color), len = 1.3 - 0.3, cx = (X(k) + X(k + 1)) / 2;
     const shell = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, len, 16).rotateZ(Math.PI / 2),
       new THREE.MeshStandardMaterial({ color:0xaec4d0, transparent:true, opacity:0.24, roughness:0.08, metalness:0, envMapIntensity:2, emissive:col, emissiveIntensity:0, depthWrite:false }));
     shell.position.set(cx, ROW_Y, 0.1); g.add(shell);
@@ -403,7 +403,7 @@ const chain = (() => {
       }
       const ng = base.map((b, k) => (SW[k] && !on[k]) ? 0 : Math.max(act[k], b, pn[k]));
       nodes.forEach((n, k) => { n.lens.material.emissiveIntensity = 0.05 + 2.4 * ng[k]; n.halo.material.opacity = Math.min(1, ng[k]) * 0.6; act[k] *= Math.exp(-dt / 0.7); });
-      levers.forEach((lv, k) => { if (!lv) return; levVel[k] += ((on[k] ? -0.6 : 0.6) - lv.rotation.x) * 320 * dt; levVel[k] *= Math.exp(-dt * 22); lv.rotation.x += levVel[k] * dt; });   // spring-loaded throw
+      levers.forEach((lv, k) => { if (!lv) return; levVel[k] += ((on[k] ? -0.5 : 0.5) - lv.rotation.x) * 320 * dt; levVel[k] *= Math.exp(-dt * 22); lv.rotation.x += levVel[k] * dt; });   // spring-loaded throw
       tubes.forEach((tb, k) => { const v = Math.max(ng[k], ng[k + 1]) * 0.8; const w = Math.max(v, pt[k]); tb.core.material.opacity = Math.min(1, w) * 0.95; tb.shell.material.emissiveIntensity = Math.min(1, w) * 1.4; });
     },
   };

@@ -1,4 +1,4 @@
-# 3D Touch EQ
+# Cruise MixEdit
 
 A touch-friendly 3D mixer: three faders (Low / Mid / High) each control one band of a
 real-time 3-band EQ built from Web Audio `BiquadFilterNode`s. A 3D spectrum analyser
@@ -22,3 +22,19 @@ python3 -m http.server 8000   # then open http://localhost:8000
 - Drag the background to orbit, pinch/scroll to zoom, double-tap a fader to reset it.
 
 Files: `index.html` (3D UI), `audio.js` (audio graph/sources), `eq.js` (band definitions).
+
+## Mastering presets
+The **Preset** dropdown (A Apple/iTunes, B Spotify, C Custom, T Test) is defined in `eq.js`. Picking one moves the
+three faders to the preset's EQ values and configures saturation, stereo spread, compressor, limiter and master gain.
+`T` is meter-only (EQ flat, no processing). **Reset EQ** returns the faders and the mastering chain to neutral.
+
+The meter (bottom right) shows approximate momentary loudness (K-weighted, 400 ms) and sample peak. Presets do not
+auto-normalise to their LUFS target; the target is shown so you can ride the faders/source level toward it.
+
+## Branding assets
+`assets/cm-logo.png` (the Cm monogram, used as the toolbar badge) and `assets/cruisemixedit-hands.png` (the backdrop mural) are part of the Cruise MixEdit identity.
+
+## Signal-path bridge
+The sloped bridge at the front of the desk shows the real chain: IN, LOW, MID, HIGH, SAT, WIDTH, COMP, LIM, OUT, joined by
+glass tubes. Each stage between IN and OUT has a chrome toggle switch that bypasses it in the audio (up = in the chain, down = bypassed; a band's fader position is kept). Reset EQ puts every switch back up. It is dark by default. A stage lights when you touch it or when it is working (compressor/limiter reduction),
+and a soft pulse of light runs down the tubes on transients and on every change or preset.

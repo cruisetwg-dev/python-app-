@@ -3,31 +3,48 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>3D Touch EQ</title>
+<title>Cruise MixEdit</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Jost:wght@400;500;600&display=swap">
 <style>
-  :root { --bg:#0b0d14; --fg:#e8ecf5; --muted:#8892a8; --accent:#5ee1ff; }
+  /* Tactile elegance: machined graphite desk, aluminum caps, brass and copper indicators, warm key light. */
+  :root {
+    --bg:#121316; --panel:#1b1d21; --edge:#33363d; --ink:#e9e6df; --muted:#8f8c84;
+    --brass:#d2ad6a; --copper:#cf7f5c; --steel:#9fc0d4;
+    --label:"Jost", "Futura", "Avenir Next", system-ui, sans-serif;
+    --mono:"IBM Plex Mono", ui-monospace, Menlo, monospace;
+  }
   * { box-sizing:border-box; }
-  html, body { margin:0; height:100%; background:var(--bg); color:var(--fg);
-    font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; overflow:hidden; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--ink); font-family:var(--label); overflow:hidden; }
   canvas { display:block; touch-action:none; }
-  #bar { position:fixed; left:0; right:0; top:0; display:flex; flex-wrap:wrap; gap:8px;
-    align-items:center; padding:10px 16px; background:linear-gradient(#0b0d14ee,#0b0d1400); z-index:2; }
-  #bar h1 { font-size:15px; margin:0 8px 0 0; letter-spacing:.08em; text-transform:uppercase; }
-  button, label.btn { background:#1a2030; color:var(--fg); border:1px solid #2c3550; border-radius:8px;
-    padding:8px 14px; font-size:14px; cursor:pointer; }
-  button:active, label.btn:active { background:#26304a; }
-  button.on { border-color:var(--accent); color:var(--accent); }
-  select { background:#1a2030; color:var(--fg); border:1px solid #2c3550; border-radius:8px; padding:8px; font-size:14px; }
+  #bar { position:fixed; left:0; right:0; top:0; display:flex; flex-wrap:wrap; gap:8px; align-items:center;
+    padding:12px 16px; z-index:2; background:linear-gradient(#121316f2, #12131600); }
+  #bar h1 { display:flex; align-items:center; gap:10px; font-size:12px; font-weight:500; margin:0 10px 0 0; letter-spacing:.28em; text-transform:uppercase; color:var(--ink); }
+  .badge { width:34px; height:34px; border-radius:50%; background:#000; border:1px solid var(--edge); box-shadow:0 0 12px #d2ad6a22; display:grid; place-items:center; flex:none; }
+  .badge img { width:76%; height:76%; display:block; }
+  .word { font-weight:300; letter-spacing:.34em; font-size:13px; white-space:nowrap; }
+  .word b { font-weight:600; font-style:italic; letter-spacing:.2em; margin-right:.7em; }
+  button, label.btn, select {
+    font:500 12px var(--label); letter-spacing:.1em; text-transform:uppercase; color:var(--ink);
+    padding:9px 15px; border-radius:10px; border:1px solid var(--edge); cursor:pointer;
+    background:linear-gradient(#2a2d33, #1c1e23); box-shadow:inset 0 1px 0 #ffffff12, 0 1px 2px #0008;
+  }
+  select { text-transform:none; letter-spacing:.04em; font-size:13px; padding-right:10px; }
+  button:active, label.btn:active { background:linear-gradient(#1c1e23, #25282e); box-shadow:inset 0 1px 3px #000a; }
+  button.on { color:var(--brass); border-color:#6f5a34; box-shadow:inset 0 1px 0 #ffffff12, 0 0 14px #d2ad6a33; }
+  button:focus-visible, select:focus-visible, label.btn:focus-within { outline:2px solid var(--brass); outline-offset:2px; }
   input[type=file] { display:none; }
-  #hint { position:fixed; left:0; right:0; bottom:10px; text-align:center; font-size:12px; color:var(--muted);
-    pointer-events:none; padding:0 16px; }
-  #readout { position:fixed; right:16px; top:56px; font:12px ui-monospace,Menlo,monospace; color:var(--muted);
-    text-align:right; line-height:1.6; pointer-events:none; }
+  #hint { position:fixed; left:0; right:0; bottom:10px; text-align:center; font-size:12px; letter-spacing:.04em;
+    color:var(--muted); pointer-events:none; padding:0 16px; }
+  #readout, #meter { position:fixed; right:16px; font:400 12px var(--mono); color:var(--muted); text-align:right;
+    line-height:1.7; pointer-events:none; }
+  #readout { top:60px; }
+  #meter { bottom:34px; }
+  #readout b, #meter b { color:var(--ink); font-weight:500; }
 </style>
 </head>
 <body>
 <div id="bar">
-  <h1>3D Touch EQ</h1>
+  <h1><span class="badge"><img src="./assets/cm-logo.png" alt=""></span><span class="word"><b>Cruise</b>MixEdit</span></h1>
   <button id="play">▶ Start</button>
   <select id="source" aria-label="Audio source">
     <option value="synth">Demo loop</option>
@@ -37,110 +54,361 @@
   </select>
   <label class="btn" for="file">Load file</label>
   <input id="file" type="file" accept="audio/*">
+  <select id="preset" aria-label="Target preset">
+    <option value="">Preset…</option>
+  </select>
   <button id="reset">Reset EQ</button>
 </div>
 <div id="readout"></div>
-<div id="hint">Drag a fader up/down to change that band live · drag the background to orbit · pinch/scroll to zoom · double-tap a fader to reset it</div>
+<div id="meter"></div>
+<div id="hint">Drag a fader to shape that band live · drag the background to orbit · pinch or scroll to zoom · double-tap a fader to reset it · flick a switch on the bridge to bypass that stage</div>
 
 <script type="importmap">{"imports":{"three":"./vendor/three.module.js"}}</script>
 <script type="module">
 import * as THREE from 'three';
-import { EQ } from './eq.js';
+import { EQ, MASTER_PRESETS, getPresetById } from './eq.js';
 import { AudioEngine } from './audio.js';
 
 const BANDS = EQ.bands;                       // [{name, type, freq, q, color}]
 const RANGE = EQ.rangeDb;                     // ±dB
 const TRACK_H = 3;                            // fader travel in world units
+const DESK_Y = -2.1;                          // top surface of the desk
 const dbToY = db => (db / RANGE) * (TRACK_H / 2);
 const yToDb = y => Math.max(-RANGE, Math.min(RANGE, (y / (TRACK_H / 2)) * RANGE));
+
+// Indicator colors for the visual design (eq.js keeps its own band colors untouched).
+const SKIN = { LOW:'#cf7f5c', MID:'#d2ad6a', HIGH:'#9fc0d4' };
+const skin = band => SKIN[band.name] ?? band.color;
+const INK = '#e9e6df', MUTED = '#8f8c84';
+const LABEL_FONT = '"Jost", "Futura", system-ui, sans-serif', MONO_FONT = '"IBM Plex Mono", ui-monospace, Menlo, monospace';
 
 const audio = new AudioEngine(BANDS);
 
 // ---------- scene ----------
 const renderer = new THREE.WebGLRenderer({ antialias:true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.1;
 document.body.appendChild(renderer.domElement);
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0b0d14);
-scene.fog = new THREE.Fog(0x0b0d14, 12, 30);
-const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
-scene.add(new THREE.AmbientLight(0xffffff, 0.5));
-const key = new THREE.DirectionalLight(0xffffff, 1.2); key.position.set(4, 8, 6); scene.add(key);
+scene.background = new THREE.Color(0x121316);
+scene.fog = new THREE.Fog(0x121316, 14, 34);
+const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
 
-// floor grid
-const grid = new THREE.GridHelper(30, 30, 0x2c3550, 0x161c2c); grid.position.y = -TRACK_H/2 - 0.6; scene.add(grid);
+// A tiny studio for the metal to reflect: dark room, a big overhead softbox and a warm strip light.
+(function makeEnv() {
+  const env = new THREE.Scene();
+  env.add(new THREE.Mesh(new THREE.BoxGeometry(24, 12, 24), new THREE.MeshBasicMaterial({ color:0x1a1b1f, side:THREE.BackSide })));
+  const panel = (w, h, color, k, pos, rx, ry) => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color:new THREE.Color(color).multiplyScalar(k), side:THREE.DoubleSide }));
+    m.position.set(...pos); m.rotation.set(rx, ry, 0); env.add(m);
+  };
+  panel(10, 5, 0xffffff, 6, [0, 5.5, 1], Math.PI / 2, 0);
+  panel(1.2, 7, 0xffd9a8, 8, [-9, 0, 2], 0, Math.PI / 2);
+  panel(0.8, 6, 0x9db4d6, 4, [9, 0, -3], 0, -Math.PI / 2);
+  scene.environment = new THREE.PMREMGenerator(renderer).fromScene(env, 0.04).texture;
+})();
 
-// spectrum bars behind the faders
-const NBARS = 48;
-const bars = [];
-const barGeo = new THREE.BoxGeometry(0.22, 1, 0.22);
+scene.add(new THREE.AmbientLight(0xffffff, 0.12));
+const key = new THREE.DirectionalLight(0xffe6c4, 2.4); key.position.set(4, 8, 6); key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048); key.shadow.bias = -0.0005; key.shadow.normalBias = 0.02;
+Object.assign(key.shadow.camera, { left:-9, right:9, top:9, bottom:-9, near:1, far:26 });
+scene.add(key);
+const rim = new THREE.DirectionalLight(0x9db4d6, 0.9); rim.position.set(-5, 3, -6); scene.add(rim);
+
+function roundedBox(w, h, d, r, b) {            // rounded-rectangle slab with a soft machined edge; extruded along z
+  const x = -w / 2, y = -h / 2, s = new THREE.Shape();
+  s.moveTo(x + r, y); s.lineTo(x + w - r, y); s.quadraticCurveTo(x + w, y, x + w, y + r);
+  s.lineTo(x + w, y + h - r); s.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  s.lineTo(x + r, y + h); s.quadraticCurveTo(x, y + h, x, y + h - r);
+  s.lineTo(x, y + r); s.quadraticCurveTo(x, y, x + r, y);
+  const g = new THREE.ExtrudeGeometry(s, { depth:d - 2 * b, bevelEnabled:true, bevelThickness:b, bevelSize:b, bevelSegments:3, curveSegments:8 });
+  g.translate(0, 0, -(d - 2 * b) / 2);
+  return g;
+}
+function brushedTexture() {                      // fine horizontal streaks for the anodized desk top
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const x = c.getContext('2d'); x.fillStyle = '#808080'; x.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 1600; i++) {
+    const v = 100 + Math.random() * 60;
+    x.strokeStyle = `rgba(${v},${v},${v},0.18)`; x.lineWidth = 1;
+    const y = Math.random() * 256, x0 = Math.random() * 256;
+    x.beginPath(); x.moveTo(x0, y); x.lineTo(x0 + 40 + Math.random() * 160, y); x.stroke();
+  }
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(0.25, 0.25); return t;
+}
+
+// desk and ground
+const desk = new THREE.Mesh(roundedBox(12.4, 6.4, 0.4, 0.35, 0.06).rotateX(-Math.PI / 2),
+  new THREE.MeshStandardMaterial({ color:0x2a2c32, metalness:0.75, roughness:0.4, bumpMap:brushedTexture(), bumpScale:0.5, envMapIntensity:0.6 }));
+desk.position.set(0, DESK_Y - 0.2, -0.8); desk.receiveShadow = true; scene.add(desk);
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(80, 80).rotateX(-Math.PI / 2), new THREE.ShadowMaterial({ opacity:0.5 }));   // shadow only: the desk floats in the dark
+ground.position.y = DESK_Y - 0.7; ground.receiveShadow = true; scene.add(ground);
+
+// spectrum: slim brass-to-ivory light columns standing on the desk behind the faders
+const NBARS = 48, bars = [];
+const barGeo = new THREE.BoxGeometry(0.09, 1, 0.09);
 for (let i = 0; i < NBARS; i++) {
-  const m = new THREE.MeshStandardMaterial({ color:new THREE.Color().setHSL(0.55 + 0.45 * i / NBARS, 0.8, 0.55), emissiveIntensity:0.4 });
-  m.emissive = m.color.clone().multiplyScalar(0.4);
-  const b = new THREE.Mesh(barGeo, m);
-  b.position.set((i - NBARS/2) * 0.27, -TRACK_H/2 - 0.6, -3);
+  const col = new THREE.Color(0xe9e6df).lerp(new THREE.Color(0xd2ad6a), i / (NBARS - 1));
+  const b = new THREE.Mesh(barGeo, new THREE.MeshStandardMaterial({ color:col, emissive:col, emissiveIntensity:0.35, roughness:0.4, metalness:0.2 }));
+  b.position.set((i - (NBARS - 1) / 2) * 0.2, DESK_Y, -3);
   scene.add(b); bars.push(b);
+}
+
+// backdrop: a concrete wall with one spray-painted ghost, brass halo and drips. It breathes with the bass.
+const wallTex = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const x = c.getContext('2d'); x.fillStyle = '#808080'; x.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 9000; i++) { const v = 90 + Math.random() * 90; x.fillStyle = `rgba(${v},${v},${v},0.35)`; x.fillRect(Math.random() * 256, Math.random() * 256, 1 + Math.random() * 2, 1 + Math.random() * 2); }
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(4, 2.5); return t;
+})();
+const wall = new THREE.Mesh(new THREE.PlaneGeometry(16, 9), new THREE.MeshStandardMaterial({ color:0x1b1c21, roughness:0.95, bumpMap:wallTex, bumpScale:0.8 }));
+wall.position.set(0, 2.2, -4.3); wall.receiveShadow = true; scene.add(wall);
+
+// Backdrop mural: the CRUISEMIXEDIT "Era of the Engineer" artwork, hands over the face. Black falls away into the wall.
+// It plays the EQ back as light: left hand glows copper with the lows, the name flares brass with the mids,
+// the right hand goes steel-blue with the highs. Brass glints twinkle on the fingers like rings catching a light.
+const HANDS_SRC = './assets/cruisemixedit-hands.png';
+const MURAL = { w: 7, h: 7 * 1009 / 1024, y: 3.0, z: -4.28 };
+const mural = (() => {
+  const tex = new THREE.TextureLoader().load(HANDS_SRC, () => seedGlints(tex.image)); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
+  const col = h => { const c = new THREE.Color(h); return new THREE.Vector3(c.r, c.g, c.b); };
+  const mat = new THREE.ShaderMaterial({
+    transparent:true, depthWrite:false,
+    uniforms:{ map:{ value:tex }, uBase:{ value:0.42 }, uLow:{ value:0 }, uMid:{ value:0 }, uHigh:{ value:0 },
+               cIvory:{ value:new THREE.Vector3(0.914, 0.902, 0.875) }, cCopper:{ value:new THREE.Vector3(0.95, 0.46, 0.27) },
+               cBrass:{ value:new THREE.Vector3(1.0, 0.80, 0.42) }, cSteel:{ value:new THREE.Vector3(0.52, 0.80, 0.98) } },
+    vertexShader:'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader:`varying vec2 vUv; uniform sampler2D map; uniform float uBase, uLow, uMid, uHigh; uniform vec3 cIvory, cCopper, cBrass, cSteel;
+      void main(){
+        float a = texture2D(map, vUv).a;
+        float L = smoothstep(0.62, 0.08, vUv.x) * uLow;                 // left hand
+        float R = smoothstep(0.38, 0.92, vUv.x) * uHigh;                // right hand
+        float N = exp(-pow((vUv.y - 0.53) / 0.07, 2.0)) * uMid;         // the name row
+        vec3 c = cIvory + cCopper * L * 1.5 + cSteel * R * 1.5 + cBrass * N * 1.6;
+        float k = uBase + 0.75 * (L + R + N);
+        gl_FragColor = vec4(c, a * clamp(k, 0.0, 1.0));
+      }`
+  });
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(MURAL.w, MURAL.h), mat);
+  m.scale.setScalar(1.15); m.position.set(0, MURAL.y, MURAL.z); scene.add(m); return m;
+})();
+// glints: sampled from the brightest finger pixels once the artwork has loaded
+const glints = [];
+function seedGlints(img) {
+  const c = document.createElement('canvas'); c.width = 256; c.height = Math.round(256 * MURAL.h / MURAL.w);
+  const x = c.getContext('2d'); x.drawImage(img, 0, 0, c.width, c.height);
+  const d = x.getImageData(0, 0, c.width, c.height).data;
+  const sc = document.createElement('canvas'); sc.width = sc.height = 64; const sx = sc.getContext('2d');
+  const g = sx.createRadialGradient(32, 32, 0, 32, 32, 32); g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.25, 'rgba(255,225,160,0.55)'); g.addColorStop(1, 'rgba(255,200,100,0)');
+  sx.fillStyle = g; sx.fillRect(0, 0, 64, 64); sx.strokeStyle = 'rgba(255,240,200,.95)'; sx.lineWidth = 2;
+  sx.beginPath(); sx.moveTo(32, 2); sx.lineTo(32, 62); sx.moveTo(2, 32); sx.lineTo(62, 32); sx.stroke();
+  const starTex = new THREE.CanvasTexture(sc);
+  for (let t = 0, n = 0; t < 20000 && n < 14; t++) {
+    const px = Math.random() * c.width | 0, py = (c.height * (0.08 + Math.random() * 0.55)) | 0;   // upper two-thirds: fingers and knuckles
+    if (d[(py * c.width + px) * 4 + 3] > 190) {
+      const s = new THREE.Sprite(new THREE.SpriteMaterial({ map:starTex, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false, opacity:0 }));
+      s.position.set((px / c.width - 0.5) * MURAL.w * 1.15, MURAL.y + (0.5 - py / c.height) * MURAL.h * 1.15, MURAL.z + 0.05);
+      s.scale.setScalar(0.14 + Math.random() * 0.16); s.userData.phase = Math.random() * 6.283; s.userData.rate = 0.8 + Math.random() * 1.6;
+      scene.add(s); glints.push(s); n++;
+    }
+  }
+}
+const lvl = { low:0, mid:0, high:0 };
+let outPeak = -90, lastT = 0, prevEnergy = 0, lastOnset = 0;
+
+// canvas-drawn engravings (redrawn once the web fonts arrive)
+const redraws = [];
+function engraving(w, h, draw, mat) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
+  const paint = () => { const x = c.getContext('2d'); x.clearRect(0, 0, w, h); draw(x, w, h); tex.needsUpdate = true; };
+  paint(); redraws.push(paint); return { c, tex, paint };
+}
+const PX = 320;                                  // scale-plane pixels per world unit
+const scaleTick = db => Math.round(TRACK_H / 2 * PX * (db / RANGE));
+function drawScale(x, w, h) {
+  x.textBaseline = 'middle';
+  for (let db = -RANGE; db <= RANGE; db++) {
+    const y = h / 2 - scaleTick(db), major = db % 5 === 0;
+    x.strokeStyle = db === 0 ? 'rgba(233,230,223,1)' : (major ? 'rgba(233,230,223,.85)' : 'rgba(233,230,223,.4)');
+    x.lineWidth = major ? 3 : 2; x.beginPath(); x.moveTo(w - 4, y); x.lineTo(w - (major ? 44 : 24), y); x.stroke();
+    if (major) { x.fillStyle = db === 0 ? INK : '#b9b5ab'; x.font = `500 32px ${MONO_FONT}`; x.textAlign = 'right';
+      x.fillText(db > 0 ? `+${db}` : db < 0 ? `−${-db}` : '0', w - 56, y); }
+  }
 }
 
 // faders
 const faders = BANDS.map((band, i) => {
-  const x = (i - 1) * 2.4;
-  const g = new THREE.Group(); g.position.x = x; scene.add(g);
-  const color = new THREE.Color(band.color);
+  const g = new THREE.Group(); g.position.x = (i - 1) * 2.7; scene.add(g);
+  const color = new THREE.Color(skin(band));
+  const metal = (c, m, r, e = 1) => new THREE.MeshStandardMaterial({ color:c, metalness:m, roughness:r, envMapIntensity:e });
+  const add = (mesh, parent = g) => { mesh.castShadow = true; parent.add(mesh); return mesh; };
 
-  const slot = new THREE.Mesh(new THREE.BoxGeometry(0.16, TRACK_H + 0.4, 0.16),
-    new THREE.MeshStandardMaterial({ color:0x1a2030, roughness:0.6 }));
-  g.add(slot);
-  // tick marks: -max, 0, +max
-  [-RANGE, 0, RANGE].forEach(db => {
-    const t = new THREE.Mesh(new THREE.BoxGeometry(db === 0 ? 1.1 : 0.7, 0.03, 0.03),
-      new THREE.MeshBasicMaterial({ color: db === 0 ? 0x5a6688 : 0x2c3550 }));
-    t.position.y = dbToY(db); g.add(t);
-  });
-  // glowing fill from 0 dB to handle
-  const fill = new THREE.Mesh(new THREE.BoxGeometry(0.22, 1, 0.22),
-    new THREE.MeshStandardMaterial({ color, emissive:color, emissiveIntensity:0.8 }));
-  g.add(fill);
-  // handle
-  const handle = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.38, 0.6),
-    new THREE.MeshStandardMaterial({ color:0xdfe6f5, metalness:0.4, roughness:0.35, emissive:color, emissiveIntensity:0.15 }));
-  handle.userData.index = i; g.add(handle);
-  // generous invisible touch target
-  const hit = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.0, 1.2), new THREE.MeshBasicMaterial({ visible:false }));
-  hit.userData.index = i; handle.add(hit);
+  // socket, slot with two machined rails, engraved dB scale
+  add(new THREE.Mesh(roundedBox(0.8, 0.4, 0.6, 0.08, 0.03), metal(0x1d1f23, 0.8, 0.4))).position.y = DESK_Y + 0.2;
+  const slot = new THREE.Mesh(new THREE.BoxGeometry(0.12, TRACK_H + 0.4, 0.1), metal(0x050607, 0.2, 0.9)); g.add(slot);
+  for (const sx of [-0.1, 0.1]) { const r = add(new THREE.Mesh(new THREE.BoxGeometry(0.03, TRACK_H + 0.4, 0.14), metal(0x8d9097, 0.9, 0.35))); r.position.x = sx; }
+  const sc = engraving(224, Math.round((TRACK_H + 0.4) * PX), drawScale);
+  const scale = new THREE.Mesh(new THREE.PlaneGeometry(224 / PX, TRACK_H + 0.4), new THREE.MeshBasicMaterial({ map:sc.tex, transparent:true, depthWrite:false }));
+  scale.position.set(-0.2 - 112 / PX, 0, 0.072); g.add(scale);
 
-  // label sprite
-  const label = makeLabel(band.name, band.freqLabel, band.color);
-  label.position.set(0, -TRACK_H/2 - 0.55, 0.3);
-  g.add(label);
-  const value = makeValueSprite();
-  value.position.set(0, TRACK_H/2 + 0.6, 0);
-  g.add(value);
+  // lit inlay from 0 dB to the cap
+  const fill = new THREE.Mesh(new THREE.BoxGeometry(0.05, 1, 0.04), new THREE.MeshStandardMaterial({ color, emissive:color, emissiveIntensity:1.3, roughness:0.4 }));
+  fill.position.z = 0.055; g.add(fill);
 
-  return { band, group:g, handle, hit, fill, value, db:0 };
+  // cap: machined aluminum, ridged grip, lit indicator line
+  const handle = new THREE.Group(); g.add(handle);
+  add(new THREE.Mesh(roundedBox(0.95, 0.5, 0.5, 0.08, 0.05), metal(0xc9ccd1, 0.95, 0.28, 1.25)), handle).position.z = 0.0;
+  for (const gy of [-0.17, -0.1, 0.1, 0.17]) {
+    const gr = new THREE.Mesh(new THREE.BoxGeometry(0.84, 0.016, 0.02), metal(0x2a2c30, 0.5, 0.5)); gr.position.set(0, gy, 0.255); handle.add(gr);
+  }
+  const glow = new THREE.Mesh(new THREE.BoxGeometry(0.84, 0.03, 0.02), new THREE.MeshStandardMaterial({ color, emissive:color, emissiveIntensity:0.9, roughness:0.3 }));
+  glow.position.set(0, 0, 0.256); handle.add(glow);
+  const hit = new THREE.Mesh(new THREE.BoxGeometry(1.7, 1.0, 1.2), new THREE.MeshBasicMaterial({ visible:false })); handle.add(hit);
+  handle.traverse(o => { if (o.isMesh) o.userData.index = i; });
+
+  const label = makeLabel(band.name, band.freqLabel, skin(band));
+  label.position.set(0, DESK_Y + 0.42, 0.95); g.add(label);
+  const value = makeValueSprite(); value.position.set(0, TRACK_H / 2 + 0.55, 0); g.add(value);
+
+  return { band, group:g, handle, hit, fill, glow, value, db:0 };
 });
 
 function makeLabel(name, sub, color) {
-  const c = document.createElement('canvas'); c.width = 256; c.height = 128;
-  const x = c.getContext('2d');
-  x.textAlign = 'center'; x.fillStyle = color; x.font = 'bold 54px system-ui'; x.fillText(name, 128, 62);
-  x.fillStyle = '#8892a8'; x.font = '30px system-ui'; x.fillText(sub, 128, 106);
-  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map:new THREE.CanvasTexture(c), transparent:true, depthWrite:false }));
+  const e = engraving(256, 128, (x, w) => {
+    x.textAlign = 'center'; x.textBaseline = 'alphabetic';
+    x.fillStyle = color; x.font = `600 50px ${LABEL_FONT}`; try { x.letterSpacing = '6px'; } catch {}
+    x.fillText(name, w / 2 + 3, 64);
+    x.fillStyle = MUTED; x.font = `400 26px ${MONO_FONT}`; try { x.letterSpacing = '0px'; } catch {}
+    x.fillText(sub, w / 2, 104);
+  });
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map:e.tex, transparent:true, depthWrite:false }));
   s.scale.set(1.6, 0.8, 1); return s;
 }
 function makeValueSprite() {
   const c = document.createElement('canvas'); c.width = 256; c.height = 96;
-  const tex = new THREE.CanvasTexture(c);
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map:tex, transparent:true, depthWrite:false }));
   s.scale.set(1.6, 0.6, 1); s.userData = { c, tex }; return s;
 }
 function drawValue(sprite, db) {
-  const { c, tex } = sprite.userData; const x = c.getContext('2d');
-  x.clearRect(0, 0, c.width, c.height);
-  x.textAlign = 'center'; x.fillStyle = '#e8ecf5'; x.font = 'bold 44px ui-monospace,Menlo,monospace';
-  x.fillText((db > 0 ? '+' : '') + db.toFixed(1) + ' dB', 128, 62);
+  const { c, tex } = sprite.userData, x = c.getContext('2d');
+  x.clearRect(0, 0, c.width, c.height); x.textBaseline = 'alphabetic'; x.textAlign = 'left';
+  const num = (db > 0 ? '+' : db < 0 ? '−' : '') + Math.abs(db).toFixed(1);
+  x.font = `500 46px ${MONO_FONT}`; const w1 = x.measureText(num).width;
+  x.font = `400 24px ${MONO_FONT}`; const w2 = x.measureText(' dB').width;
+  const x0 = (c.width - (w1 + w2)) / 2;
+  x.fillStyle = INK; x.font = `500 46px ${MONO_FONT}`; x.fillText(num, x0, 62);
+  x.fillStyle = MUTED; x.font = `400 24px ${MONO_FONT}`; x.fillText(' dB', x0 + w1, 62);
   tex.needsUpdate = true;
 }
+
+// ---------- signal path: the base the plug-in stands on ----------
+// A sloped bridge across the front of the desk, like a console meter bridge. The real chain sits on it in series:
+// IN > LOW > MID > HIGH > SAT > WIDTH > COMP > LIM > OUT, joined by glass tubes. Everything is dark by default.
+// A stage glows when you touch it or when it is actually working (compressor and limiter reduction), and a soft
+// pulse of light runs down the tubes on transients and on every change, so you can see where the signal goes.
+const chain = (() => {
+  const STAGES = [
+    { id:'IN', sub:'SOURCE', color:INK },
+    ...BANDS.map(b => ({ id:b.name, sub:b.freqLabel.toUpperCase(), color:skin(b) })),
+    { id:'SAT', sub:'DRIVE', color:'#e0a55a' }, { id:'WIDTH', sub:'MID/SIDE', color:'#9fc0d4' },
+    { id:'COMP', sub:'DYNAMICS', color:INK }, { id:'LIM', sub:'CEILING', color:'#cf7f5c' }, { id:'OUT', sub:'MASTER', color:'#d2ad6a' },
+  ];
+  const N = STAGES.length, X = i => (i - (N - 1) / 2) * 1.3, ROW_Y = 0.08;
+  const g = new THREE.Group(); g.position.set(0, DESK_Y + 0.2, 2.06); g.rotation.x = -0.96; scene.add(g);   // low at the front, rising toward the faders
+  const metal = (c, m, r, e = 1) => new THREE.MeshStandardMaterial({ color:c, metalness:m, roughness:r, envMapIntensity:e });
+  const panel = new THREE.Mesh(roundedBox(11.9, 0.7, 0.14, 0.05, 0.02), metal(0x23252a, 0.8, 0.38, 0.8)); panel.castShadow = panel.receiveShadow = true; g.add(panel);
+  const groove = new THREE.Mesh(new THREE.BoxGeometry(11.3, 0.26, 0.02), metal(0x08090b, 0.3, 0.8)); groove.position.set(0, ROW_Y, 0.075); g.add(groove);
+
+  const hc = document.createElement('canvas'); hc.width = hc.height = 64; const hx = hc.getContext('2d');
+  const hg = hx.createRadialGradient(32, 32, 0, 32, 32, 32); hg.addColorStop(0, 'rgba(255,255,255,1)'); hg.addColorStop(0.35, 'rgba(255,255,255,0.35)'); hg.addColorStop(1, 'rgba(255,255,255,0)');
+  hx.fillStyle = hg; hx.fillRect(0, 0, 64, 64); const haloTex = new THREE.CanvasTexture(hc);
+
+  const SW = STAGES.map((_, k) => k > 0 && k < N - 1);          // switchable: every stage between IN and OUT
+  const on = STAGES.map(() => true), levers = [], levVel = [], hits = [];
+  const chrome = metal(0xdfe2e6, 1, 0.16, 1.5), steel = metal(0x8f949c, 0.88, 0.42, 0.9), dark = metal(0x0d0e10, 0.5, 0.5);
+  const nodes = STAGES.map((st, k) => {
+    const col = new THREE.Color(st.color);
+    // lamp above the stage: dark until the stage is touched or working
+    const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.034, 0.034, 0.03, 20).rotateX(Math.PI / 2), new THREE.MeshStandardMaterial({ color:0x141517, emissive:col, emissiveIntensity:0.05, roughness:0.3 }));
+    lens.position.set(X(k), 0.285, 0.09); g.add(lens);
+    const bezel = new THREE.Mesh(new THREE.TorusGeometry(0.044, 0.011, 10, 24), chrome); bezel.position.set(X(k), 0.285, 0.085); g.add(bezel);
+    const halo = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 0.6), new THREE.MeshBasicMaterial({ map:haloTex, color:col, transparent:true, opacity:0, blending:THREE.AdditiveBlending, depthWrite:false }));
+    halo.position.set(X(k), 0.285, 0.13); g.add(halo);
+    if (SW[k]) {                                   // chrome bat-handle toggle on a hex nut. Up = in the chain, down = bypassed
+      const nut = new THREE.Mesh(new THREE.CylinderGeometry(0.115, 0.115, 0.05, 6).rotateX(Math.PI / 2), steel); nut.position.set(X(k), ROW_Y, 0.095); nut.castShadow = true; g.add(nut);
+      const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.085, 0.045, 24).rotateX(Math.PI / 2), chrome); collar.position.set(X(k), ROW_Y, 0.14); g.add(collar);
+      const lever = new THREE.Group(); lever.position.set(X(k), ROW_Y, 0.165); g.add(lever);
+      const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.034, 0.3, 16).rotateX(Math.PI / 2), chrome); stem.position.z = 0.15; stem.castShadow = true; lever.add(stem);
+      const ball = new THREE.Mesh(new THREE.SphereGeometry(0.052, 20, 14), chrome); ball.position.z = 0.31; ball.castShadow = true; lever.add(ball);
+      lever.rotation.x = -0.6; levers[k] = lever; levVel[k] = 0;
+      const hit = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.62, 0.7), new THREE.MeshBasicMaterial({ visible:false })); hit.position.set(X(k), ROW_Y, 0.25); hit.userData.sw = k; g.add(hit); hits.push(hit);
+    } else {                                       // IN and OUT are sockets
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.026, 12, 28), steel); ring.position.set(X(k), ROW_Y, 0.1); g.add(ring);
+      const hole = new THREE.Mesh(new THREE.CircleGeometry(0.085, 28), dark); hole.position.set(X(k), ROW_Y, 0.082); g.add(hole);
+    }
+    const e = engraving(256, 80, (x, w) => {
+      x.textAlign = 'center'; x.textBaseline = 'alphabetic';
+      x.fillStyle = st.color === INK ? '#cfcbc2' : st.color; x.font = `600 40px ${LABEL_FONT}`; try { x.letterSpacing = '4px'; } catch {} x.fillText(st.id, w / 2 + 2, 35);
+      x.fillStyle = MUTED; x.font = `500 26px ${MONO_FONT}`; try { x.letterSpacing = '0px'; } catch {} x.fillText(st.sub, w / 2, 69);
+    });
+    const label = new THREE.Mesh(new THREE.PlaneGeometry(1.25, 1.25 * 80 / 256), new THREE.MeshBasicMaterial({ map:e.tex, transparent:true, depthWrite:false }));
+    label.position.set(X(k), -0.2, 0.078); g.add(label);
+    return { lens, halo };
+  });
+  const tubes = STAGES.slice(0, -1).map((st, k) => {
+    const col = new THREE.Color(st.color), len = 1.3 - 0.24, cx = (X(k) + X(k + 1)) / 2;
+    const shell = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, len, 16).rotateZ(Math.PI / 2),
+      new THREE.MeshStandardMaterial({ color:0xaec4d0, transparent:true, opacity:0.24, roughness:0.08, metalness:0, envMapIntensity:2, emissive:col, emissiveIntensity:0, depthWrite:false }));
+    shell.position.set(cx, ROW_Y, 0.1); g.add(shell);
+    const core = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, len, 8).rotateZ(Math.PI / 2), new THREE.MeshBasicMaterial({ color:col, transparent:true, opacity:0, blending:THREE.AdditiveBlending, depthWrite:false }));
+    core.position.set(cx, ROW_Y, 0.1); g.add(core);
+    return { shell, core };
+  });
+
+  const act = new Array(N).fill(0), pulses = [];
+  let T = 0, lastTouch = -9;
+  const rd = v => (typeof v === 'number' ? v : v?.value ?? 0);
+  const api = {
+    pulse(from, s) { pulses.push({ p:from, s }); },
+    touch(i) { act[1 + i] = 1; if (T - lastTouch > 0.28) { api.pulse(1 + i, 0.7); lastTouch = T; } },   // a change travels downstream from the stage you touched
+    engage() { api.pulse(0, 1); [4, 5, 6, 7].forEach(k => { act[k] = Math.max(act[k], 0.7); }); },       // preset or reset: the whole chain wakes up in order
+    start() { act[0] = 1; api.pulse(0, 0.8); },
+    hits,
+    toggle(k) {                                    // a switch flips a real bypass in the audio chain
+      if (!SW[k]) return;
+      on[k] = !on[k];
+      audio.setBypass(k <= 3 ? 'eq' + (k - 1) : ['sat', 'width', 'comp', 'lim'][k - 4], !on[k]);
+      if (on[k]) { act[k] = 1; api.pulse(k, 0.6); }
+    },
+    reset() { for (let k = 0; k < N; k++) if (SW[k] && !on[k]) api.toggle(k); api.engage(); },
+    update(dt, t, playing, peak) {
+      T = t;
+      const base = new Array(N).fill(0);
+      faders.forEach((f, i) => { if (Math.abs(f.db) > 0.05) base[1 + i] = Math.min(0.25, 0.05 + Math.abs(f.db) / RANGE * 0.5); });   // an engaged band keeps a faint pilot light
+      base[4] = Math.min(0.3, rd(audio.wet?.gain) * 0.6);
+      base[5] = Math.min(0.3, Math.abs((audio.sideSum ? rd(audio.sideSum.gain) : 1) - 1) * 5);
+      base[6] = Math.min(1, -rd(audio.comp?.reduction) / 12) * 0.9;                                   // lit only while it is really squeezing
+      base[7] = Math.min(1, -rd(audio.limiter?.reduction) / 6) * 0.9;
+      if (playing) { base[0] = 0.06; base[8] = Math.max(0, Math.min(1, (peak + 36) / 36)) * 0.25; }
+      const pn = new Array(N).fill(0), pt = new Array(N - 1).fill(0);
+      for (let i = pulses.length - 1; i >= 0; i--) {
+        const q = pulses[i]; q.p += dt * 6; q.s *= Math.exp(-dt * 0.25);
+        const kk = Math.round(q.p); if (kk !== q.k) { q.k = kk; if (SW[kk] && !on[kk]) q.s *= 0.35; }   // a bypassed stage lets only a faint trace through
+        if (q.p > N + 0.5) { pulses.splice(i, 1); continue; }
+        for (let k = 0; k < N; k++) { const d = Math.abs(k - q.p); if (d < 1) pn[k] = Math.max(pn[k], (1 - d) * q.s); }
+        for (let k = 0; k < N - 1; k++) { const d = Math.abs(k + 0.5 - q.p); if (d < 1) pt[k] = Math.max(pt[k], (1 - d) * q.s); }
+      }
+      const ng = base.map((b, k) => (SW[k] && !on[k]) ? 0 : Math.max(act[k], b, pn[k]));
+      nodes.forEach((n, k) => { n.lens.material.emissiveIntensity = 0.05 + 2.4 * ng[k]; n.halo.material.opacity = Math.min(1, ng[k]) * 0.6; act[k] *= Math.exp(-dt / 0.7); });
+      levers.forEach((lv, k) => { if (!lv) return; levVel[k] += ((on[k] ? -0.6 : 0.6) - lv.rotation.x) * 320 * dt; levVel[k] *= Math.exp(-dt * 22); lv.rotation.x += levVel[k] * dt; });   // spring-loaded throw
+      tubes.forEach((tb, k) => { const v = Math.max(ng[k], ng[k + 1]) * 0.8; const w = Math.max(v, pt[k]); tb.core.material.opacity = Math.min(1, w) * 0.95; tb.shell.material.emissiveIntensity = Math.min(1, w) * 1.4; });
+    },
+  };
+  return api;
+})();
 
 function setFader(i, db, fromUser = true) {
   const f = faders[i];
@@ -150,22 +418,25 @@ function setFader(i, db, fromUser = true) {
   const h = Math.max(Math.abs(y), 0.001);
   f.fill.scale.y = h; f.fill.position.y = y / 2;
   drawValue(f.value, f.db);
-  if (fromUser) audio.setGain(i, f.db);       // real-time: applied immediately to the live filter
+  if (fromUser) { audio.setGain(i, f.db); chain.touch(i); }       // real-time: applied immediately to the live filter
   renderReadout();
 }
 function renderReadout() {
+  const sign = d => (d > 0 ? '+' : d < 0 ? '−' : '') + Math.abs(d).toFixed(1);
   document.getElementById('readout').innerHTML = faders.map(f =>
-    `${f.band.name} ${f.band.freqLabel}: <b style="color:${f.band.color}">${f.db > 0 ? '+' : ''}${f.db.toFixed(1)} dB</b>`).join('<br>');
+    `<span style="color:${skin(f.band)}">●</span> ${f.band.name} ${f.band.freqLabel} <b>${sign(f.db)} dB</b>`).join('<br>');
 }
 faders.forEach((_, i) => setFader(i, 0, false));
+document.fonts?.ready.then(() => { redraws.forEach(p => p()); faders.forEach(f => drawValue(f.value, f.db)); });
 
 // ---------- interaction (pointer events = mouse + touch + pen, multi-touch capable) ----------
 const ray = new THREE.Raycaster();
 const ndc = new THREE.Vector2();
 const active = new Map();     // pointerId -> {kind:'fader'|'orbit', ...}
 const el = renderer.domElement;
-const orbit = { theta:0, phi:0.2, dist:9, target:new THREE.Vector3(0, 0, 0) };
+const orbit = { theta:0, phi:0.3, dist:12.5, target:new THREE.Vector3(0, 0.8, 0) };
 const pinch = { d:0 };
+const pickables = faders.flatMap(f => { const m = []; f.handle.traverse(o => { if (o.isMesh) m.push(o); }); return m; });
 
 function setNdc(e) {
   const r = el.getBoundingClientRect();
@@ -185,7 +456,13 @@ let lastTap = { t:0, i:-1 };
 el.addEventListener('pointerdown', e => {
   el.setPointerCapture(e.pointerId);
   setNdc(e); ray.setFromCamera(ndc, camera);
-  const hits = ray.intersectObjects(faders.flatMap(f => [f.hit, f.handle]), false);
+  const hits = ray.intersectObjects([...pickables, ...chain.hits], false);
+  if (hits.length && hits[0].object.userData.sw !== undefined) {              // a toggle switch on the bridge
+    chain.toggle(hits[0].object.userData.sw);
+    active.set(e.pointerId, { kind:'switch' });
+    audio.resume();
+    return;
+  }
   if (hits.length) {
     const i = hits[0].object.userData.index;
     const now = performance.now();
@@ -194,14 +471,15 @@ el.addEventListener('pointerdown', e => {
     const f = faders[i];
     const grabDb = pointerToDb(e, f);
     active.set(e.pointerId, { kind:'fader', i, offset: grabDb == null ? 0 : f.db - grabDb });
-    f.handle.material.emissiveIntensity = 0.6;
+    f.glow.material.emissiveIntensity = 2.6;
+    chain.touch(i);
     audio.resume();
   } else {
     active.set(e.pointerId, { kind:'orbit', x:e.clientX, y:e.clientY });
   }
 });
 el.addEventListener('pointermove', e => {
-  const a = active.get(e.pointerId); if (!a) return;
+  const a = active.get(e.pointerId); if (!a || a.kind === 'switch') return;
   if (a.kind === 'fader') {
     const db = pointerToDb(e, faders[a.i]);
     if (db != null) setFader(a.i, yToDb(((db + a.offset) / RANGE) * (TRACK_H / 2)));
@@ -212,21 +490,21 @@ el.addEventListener('pointermove', e => {
       a.x = e.clientX; a.y = e.clientY;
       const [p, q] = pts.map(([, v]) => v);
       const d = Math.hypot(p.x - q.x, p.y - q.y);
-      if (pinch.d) orbit.dist = Math.max(4, Math.min(20, orbit.dist * (pinch.d / d)));
+      if (pinch.d) orbit.dist = Math.max(5, Math.min(22, orbit.dist * (pinch.d / d)));
       pinch.d = d; return;
     }
     orbit.theta -= (e.clientX - a.x) * 0.006;
-    orbit.phi = Math.max(-0.2, Math.min(1.2, orbit.phi + (e.clientY - a.y) * 0.006));
+    orbit.phi = Math.max(-0.1, Math.min(1.2, orbit.phi + (e.clientY - a.y) * 0.006));
     a.x = e.clientX; a.y = e.clientY;
   }
 });
 const end = e => {
   const a = active.get(e.pointerId);
-  if (a && a.kind === 'fader') faders[a.i].handle.material.emissiveIntensity = 0.15;
+  if (a && a.kind === 'fader') faders[a.i].glow.material.emissiveIntensity = 0.9;
   active.delete(e.pointerId); pinch.d = 0;
 };
 el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
-el.addEventListener('wheel', e => { e.preventDefault(); orbit.dist = Math.max(4, Math.min(20, orbit.dist * (1 + e.deltaY * 0.001))); }, { passive:false });
+el.addEventListener('wheel', e => { e.preventDefault(); orbit.dist = Math.max(5, Math.min(22, orbit.dist * (1 + e.deltaY * 0.001))); }, { passive:false });
 
 // ---------- UI ----------
 const playBtn = document.getElementById('play');
@@ -235,7 +513,7 @@ const fileIn = document.getElementById('file');
 async function startSource() {
   try {
     await audio.start(sourceSel.value, fileIn.files[0]);
-    playBtn.textContent = '■ Stop'; playBtn.classList.add('on');
+    playBtn.textContent = '■ Stop'; playBtn.classList.add('on'); chain.start();
   } catch (err) { alert('Could not start audio: ' + err.message); }
 }
 playBtn.onclick = async () => {
@@ -244,21 +522,52 @@ playBtn.onclick = async () => {
 };
 sourceSel.onchange = () => { if (audio.playing) startSource(); };
 fileIn.onchange = () => { if (fileIn.files[0]) { sourceSel.value = 'file'; startSource(); } };
-document.getElementById('reset').onclick = () => faders.forEach((_, i) => setFader(i, 0));
+// presets (eq.js): EQ values move the 3D faders; the rest of the mastering chain is applied by the engine.
+let currentPreset = null;
+const presetSel = document.getElementById('preset');
+for (const p of Object.values(MASTER_PRESETS)) {
+  const o = document.createElement('option'); o.value = p.id; o.title = p.description;
+  o.textContent = p.lufsTarget == null ? `${p.id} · ${p.label}` : `${p.id} · ${p.label} (${p.lufsTarget} LUFS, ${p.truePeakLimit} dBTP)`;
+  presetSel.appendChild(o);
+}
+presetSel.onchange = () => {
+  if (!presetSel.value) return;
+  currentPreset = getPresetById(presetSel.value);
+  setFader(0, currentPreset.eq.low); setFader(1, currentPreset.eq.mid); setFader(2, currentPreset.eq.high);
+  audio.applyMaster(currentPreset); chain.engage();
+};
+document.getElementById('reset').onclick = () => {
+  faders.forEach((_, i) => setFader(i, 0));
+  currentPreset = null; presetSel.value = ''; audio.applyMaster(null); chain.reset();
+};
+
+// meter readout: approximate momentary loudness + sample peak vs. the preset's targets
+const meterEl = document.getElementById('meter');
+let lastMeter = 0;
+function updateMeter(now) {
+  if (now - lastMeter < 100) return; lastMeter = now;
+  const m = audio.meter(); outPeak = m ? m.peak : -90;
+  if (!m) { meterEl.textContent = ''; return; }
+  const fmt = v => (isFinite(v) ? v.toFixed(1).replace('-', '−') : '—');
+  const lt = currentPreset?.lufsTarget, pl = currentPreset?.truePeakLimit;
+  const hot = (pl != null && m.peak > pl) ? 'var(--copper)' : 'inherit';
+  meterEl.innerHTML = `Loudness <b>${fmt(m.lufs)} LUFS</b>${lt != null ? ` · target ${lt}` : ''}<br>` +
+    `Peak <b style="color:${hot}">${fmt(m.peak)} dBFS</b>${pl != null ? ` · limit ${pl}` : ''}`;
+}
 
 // ---------- loop ----------
 function resize() {
   const w = innerWidth, h = innerHeight;
   renderer.setSize(w, h); camera.aspect = w / h;
-  orbit.baseDist = w < h ? 12 : 9;
   camera.updateProjectionMatrix();
 }
 addEventListener('resize', resize); resize();
-orbit.dist = innerWidth < innerHeight ? 12 : 9;
+orbit.dist = innerWidth < innerHeight ? 17 : 12.5;
 
 const spec = new Uint8Array(1024);
-function frame() {
+function frame(now) {
   requestAnimationFrame(frame);
+  updateMeter(now);
   const cp = Math.cos(orbit.phi), sp = Math.sin(orbit.phi);
   camera.position.set(orbit.target.x + orbit.dist * Math.sin(orbit.theta) * cp,
                       orbit.target.y + orbit.dist * sp,
@@ -270,11 +579,21 @@ function frame() {
     const v = n ? spec[Math.floor(Math.pow(i / NBARS, 2.2) * (n - 1))] / 255 : 0;
     const h = 0.05 + v * 3.2;
     bars[i].scale.y += (h - bars[i].scale.y) * 0.4;
-    bars[i].position.y = -TRACK_H/2 - 0.6 + bars[i].scale.y / 2;
+    bars[i].position.y = DESK_Y + bars[i].scale.y / 2;
   }
+  const band = (lo, hi) => { let b = 0; if (n) { for (let i = lo; i < hi; i++) b += spec[i]; b /= (hi - lo) * 255; } return Math.min(1, b * 1.7); };
+  const follow = (k, v) => { lvl[k] += (v - lvl[k]) * (v > lvl[k] ? 0.45 : 0.08); return lvl[k]; };   // fast attack, slow release
+  const U = mural.material.uniforms;
+  U.uLow.value = follow('low', band(1, 9)); U.uMid.value = follow('mid', band(20, 60)); U.uHigh.value = follow('high', band(150, 400));
+  const t = now * 0.001, dt = lastT ? Math.min(0.05, t - lastT) : 0.016; lastT = t;
+  const energy = band(1, 40);                                                   // a sharp rise in level (a kick, a snare) sends a soft pulse down the chain
+  if (n && energy - prevEnergy > 0.14 && t - lastOnset > 0.3) { chain.pulse(0, Math.min(0.8, 0.3 + energy * 0.5)); lastOnset = t; }
+  prevEnergy = energy;
+  chain.update(dt, t, audio.playing, outPeak);
+  for (const s of glints) s.material.opacity = Math.max(0, Math.sin(t * s.userData.rate + s.userData.phase)) ** 6 * (0.35 + 0.65 * U.uHigh.value);
   renderer.render(scene, camera);
 }
-frame();
+requestAnimationFrame(frame);
 </script>
 </body>
 </html>
